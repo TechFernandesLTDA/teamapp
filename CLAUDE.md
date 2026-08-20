@@ -8,7 +8,7 @@ Um clone básico de Trello com visual de Windows 95. É construído por **duas s
 
 | Sessão | Diretório que ela possui | Não edita |
 |---|---|---|
-| `backend` | `backend/`, `prisma/`, `docker-compose.yml` | `frontend/` |
+| `backend` | `backend/` (inclui `backend/prisma/`), `docker-compose.yml` | `frontend/` |
 | `frontend` | `frontend/` | `backend/` |
 
 `CLAUDE.md` e `docs/` são compartilhados: quem muda o contrato edita aqui **e** avisa na outra sessão. Se o código e este arquivo divergirem, **este arquivo é a autoridade** — o código está errado e deve ser corrigido.
@@ -38,7 +38,7 @@ npm run dev                        # vite, :5173 -> chama a API em :3001
 npm run build
 ```
 
-Depois de mudar `prisma/schema.prisma` rode `npx prisma migrate dev --name <descricao>`; sem isso o Prisma Client fica desatualizado e o TypeScript quebra em lugares que não têm relação com a mudança.
+Depois de mudar `backend/prisma/schema.prisma` rode `npx prisma migrate dev --name <descricao>`; sem isso o Prisma Client fica desatualizado e o TypeScript quebra em lugares que não têm relação com a mudança.
 
 ## Portas e origens
 
