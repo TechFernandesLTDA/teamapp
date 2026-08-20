@@ -70,6 +70,7 @@ body {
 }
 
 .list {
+  position: relative; /* ancora do indicador de drop de lista */
   width: 240px;
   flex: 0 0 240px;
   max-height: 100%;
@@ -106,9 +107,12 @@ body {
   opacity: 0.4;
 }
 
-/* Indicador de onde o card vai cair. */
+/* Indicador de onde o card vai cair. Inset em vez de border: border mudaria a
+   altura do card a cada hover e a coluna inteira tremeria. */
 .card.drop-here {
-  border-top: 3px solid #000080;
+  box-shadow:
+    inset 0 3px 0 #000080,
+    1px 1px 0 #000;
 }
 
 .empty.drop-here {
@@ -214,7 +218,7 @@ body {
 }
 
 .drop-end.drop-here {
-  border-top: 3px solid #000080;
+  box-shadow: inset 0 3px 0 #000080;
 }
 
 /* --- card com descricao --- */
@@ -265,4 +269,117 @@ body {
 
 .dialog-buttons .danger {
   margin-right: auto;
+}
+
+/* --- wallpaper: so um degrade sobre o teal, sem imagem externa --- */
+
+body {
+  background:
+    radial-gradient(circle at 20% 10%, #0aa0a0 0%, transparent 55%),
+    #008080;
+}
+
+/* --- reordenacao de listas (drag pela title bar) --- */
+
+.list.dragging {
+  opacity: 0.5;
+}
+
+.list.drop-before::after,
+.list.drop-after::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #000080;
+}
+
+.list.drop-before::after {
+  left: -8px;
+}
+
+.list.drop-after::after {
+  right: -8px;
+}
+
+.list .title-bar {
+  cursor: grab;
+}
+
+/* --- confirmacao --- */
+
+.confirm-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.confirm-body p {
+  margin: 0;
+}
+
+.confirm-icon {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #ffd700;
+  border: 1px solid #808000;
+  color: #000;
+  font-weight: bold;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.about-facts {
+  margin: 8px 0;
+  padding-left: 18px;
+  font-size: 11px;
+}
+
+/* --- menu Iniciar --- */
+
+.taskbar {
+  position: relative;
+}
+
+.start-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 4px;
+  margin-bottom: 3px;
+  min-width: 170px;
+  padding: 3px;
+  z-index: 20;
+}
+
+.start-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.start-items button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 5px 10px;
+}
+
+.start-items button:hover {
+  background: #000080;
+  color: #fff;
+}
+
+.start-separator {
+  height: 1px;
+  margin: 3px 2px;
+  background: #808080;
+  border-bottom: 1px solid #fff;
 }

@@ -9,8 +9,8 @@ export async function boardRoutes(app: FastifyInstance) {
       where: { slug: 'default' },
       include: {
         lists: {
-          orderBy: { position: 'asc' },
-          include: { cards: { orderBy: { position: 'asc' } } },
+          orderBy: [{ position: 'asc' }, { id: 'asc' }],
+          include: { cards: { orderBy: [{ position: 'asc' }, { id: 'asc' }] } },
         },
       },
     })

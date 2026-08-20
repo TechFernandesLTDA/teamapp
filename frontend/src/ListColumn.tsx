@@ -1,17 +1,26 @@
 import { useState } from 'react'
-import type { FormEvent } from 'react'
+import type { DragEvent, FormEvent } from 'react'
 import type { Card, List } from './types'
 
-export type DropTarget = { listId: string; index: number }
+export type CardDropTarget = { listId: string; index: number }
 
 type Props = {
   list: List
-  draggingId: string | null
-  dropTarget: DropTarget | null
-  onDragStart: (cardId: string) => void
+  index: number
+  /** Card sendo arrastado, ou null. Um drag de lista nao preenche este campo. */
+  draggingCardId: string | null
+  draggingListId: string | null
+  cardDropTarget: CardDropTarget | null
+  /** Slot (indice no array de listas) onde a lista arrastada vai cair. */
+  listDropSlot: number | null
+  isLast: boolean
+  onCardDragStart: (cardId: string) => void
+  onCardHover: (target: CardDropTarget) => void
+  onCardDrop: (list: List, index: number) => void
+  onListDragStart: (listId: string) => void
+  onListHover: (slot: number) => void
+  onListDrop: (slot: number) => void
   onDragEnd: () => void
-  onHover: (target: DropTarget) => void
-  onDrop: (list: List, index: number) => void
   onOpenCard: (card: Card) => void
   onAddCard: (listId: string, title: string) => void
   onRename: (list: List, title: string) => void
@@ -19,18 +28,19 @@ type Props = {
 }
 
 /** Metade de cima do card = solta antes dele; metade de baixo = depois. */
-function slotFor(event: { clientY: number; currentTarget: Element }, index: number): number {
+function cardSlot(event: DragEvent, index: number): number {
   const box = event.currentTarget.getBoundingClientRect()
   return event.clientY > box.top + box.height / 2 ? index + 1 : index
 }
 
 export function ListColumn(props: Props) {
-  const { list, draggingId, dropTarget, onDrop, onHover } = props
+  const { list, index, draggingCardId, draggingListId, cardDropTarget, listDropSlot } = props
   const [renaming, setRenaming] = useState(false)
   const [draftTitle, setDraftTitle] = useState(list.title)
   const [newCard, setNewCard] = useState('')
 
-  const isTarget = (index: number) => dropTarget?.listId === list.id && dropTarget.index === index
+  const isCardTarget = (i: number) =>
+    cardDropTarget?.listId === list.id && cardDropTarget.index === i
 
   const commitRename = () => {
     const title = draftTitle.trim()
@@ -47,10 +57,57 @@ export function ListColumn(props: Props) {
     setNewCard('')
   }
 
+  // Metade esquerda da lista = solta antes dela; metade direita = depois.
+  const listSlot = (e: DragEvent) => {
+    const box = e.currentTarget.getBoundingClientRect()
+    return e.clientX > box.left + box.width / 2 ? index + 1 : index
+  }
+
+  const className = [
+    'window',
+    'list',
+    draggingListId === list.id ? 'dragging' : '',
+    listDropSlot === index ? 'drop-before' : '',
+    listDropSlot === index + 1 && props.isLast ? 'drop-after' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
-    <section className="window list">
-      <div className="title-bar">
-        <div className="title-bar-text" onDoubleClick={() => setRenaming(true)}>
+    <section
+      className={className}
+      // So reage quando o que esta vindo e uma lista; card tem handlers proprios.
+      onDragOver={(e) => {
+        if (!draggingListId) return
+        e.preventDefault()
+        props.onListHover(listSlot(e))
+      }}
+      onDrop={(e) => {
+        if (!draggingListId) return
+        e.preventDefault()
+        props.onListDrop(listSlot(e))
+      }}
+    >
+      <div
+        className="title-bar"
+        draggable
+        title="Arraste a barra para reordenar a lista"
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = 'move'
+          e.dataTransfer.setData('text/plain', list.id)
+          props.onListDragStart(list.id)
+        }}
+        onDragEnd={props.onDragEnd}
+      >
+        <div
+          className="title-bar-text"
+          // Re-sincroniza antes de abrir: o componente nao remonta quando o titulo
+          // muda, entao sem isso um rename feito em outra aba seria escrito de volta.
+          onDoubleClick={() => {
+            setDraftTitle(list.title)
+            setRenaming(true)
+          }}
+        >
           {list.title} ({list.cards.length})
         </div>
         <div className="title-bar-controls">
@@ -79,48 +136,52 @@ export function ListColumn(props: Props) {
 
       <div
         className="window-body list-body"
+        // Os cards param a propagacao, entao chegar aqui significa area livre da
+        // lista (vazia, ou o espaco embaixo do ultimo card): cai no fim.
         onDragOver={(e) => {
-          // So captura o vazio da lista; sobre um card o handler dele tem prioridade.
-          if (list.cards.length === 0) {
-            e.preventDefault()
-            onHover({ listId: list.id, index: 0 })
-          }
+          if (!draggingCardId) return
+          e.preventDefault()
+          e.stopPropagation()
+          props.onCardHover({ listId: list.id, index: list.cards.length })
         }}
         onDrop={(e) => {
-          if (list.cards.length === 0) {
-            e.preventDefault()
-            onDrop(list, 0)
-          }
+          if (!draggingCardId) return
+          e.preventDefault()
+          e.stopPropagation()
+          props.onCardDrop(list, list.cards.length)
         }}
       >
         {list.cards.length === 0 && (
-          <p className={isTarget(0) ? 'empty drop-here' : 'empty'}>(vazia)</p>
+          <p className={isCardTarget(0) ? 'empty drop-here' : 'empty'}>(vazia)</p>
         )}
 
-        {list.cards.map((card, index) => (
+        {list.cards.map((card, i) => (
           <article
             key={card.id}
             className={
               'card' +
-              (draggingId === card.id ? ' dragging' : '') +
-              (isTarget(index) ? ' drop-here' : '')
+              (draggingCardId === card.id ? ' dragging' : '') +
+              (isCardTarget(i) ? ' drop-here' : '')
             }
             draggable
             onDragStart={(e) => {
               e.dataTransfer.effectAllowed = 'move'
               // Firefox so inicia o drag se houver payload.
               e.dataTransfer.setData('text/plain', card.id)
-              props.onDragStart(card.id)
+              props.onCardDragStart(card.id)
             }}
             onDragEnd={props.onDragEnd}
             onDragOver={(e) => {
-              e.preventDefault()
-              onHover({ listId: list.id, index: slotFor(e, index) })
-            }}
-            onDrop={(e) => {
+              if (!draggingCardId) return
               e.preventDefault()
               e.stopPropagation()
-              onDrop(list, slotFor(e, index))
+              props.onCardHover({ listId: list.id, index: cardSlot(e, i) })
+            }}
+            onDrop={(e) => {
+              if (!draggingCardId) return
+              e.preventDefault()
+              e.stopPropagation()
+              props.onCardDrop(list, cardSlot(e, i))
             }}
             onDoubleClick={() => props.onOpenCard(card)}
             title="Duplo clique para editar"
@@ -133,14 +194,18 @@ export function ListColumn(props: Props) {
         {list.cards.length > 0 && (
           // Alvo explicito para soltar no fim: sem ele o ultimo slot nao tem indicador.
           <div
-            className={isTarget(list.cards.length) ? 'drop-end drop-here' : 'drop-end'}
+            className={isCardTarget(list.cards.length) ? 'drop-end drop-here' : 'drop-end'}
             onDragOver={(e) => {
+              if (!draggingCardId) return
               e.preventDefault()
-              onHover({ listId: list.id, index: list.cards.length })
+              e.stopPropagation()
+              props.onCardHover({ listId: list.id, index: list.cards.length })
             }}
             onDrop={(e) => {
+              if (!draggingCardId) return
               e.preventDefault()
-              onDrop(list, list.cards.length)
+              e.stopPropagation()
+              props.onCardDrop(list, list.cards.length)
             }}
           />
         )}

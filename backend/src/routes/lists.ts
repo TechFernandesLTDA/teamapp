@@ -57,7 +57,7 @@ export async function listRoutes(app: FastifyInstance) {
     const list = await prisma.list.update({
       where: { id },
       data,
-      include: { cards: { orderBy: { position: 'asc' } } },
+      include: { cards: { orderBy: [{ position: 'asc' }, { id: 'asc' }] } },
     })
 
     broadcast('list.updated', list)

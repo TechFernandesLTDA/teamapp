@@ -48,7 +48,7 @@ Depois de mudar `backend/prisma/schema.prisma` rode `npx prisma migrate dev --na
 | Frontend (Docker, nginx) | `8090` | build estático (8080 estava ocupado no host) |
 | Frontend (vite dev) | `5173` | |
 
-O browser fala com a API **direto** em `http://localhost:3001` — não há proxy reverso na frente dela. Isso é deliberado: proxiar o upgrade do WebSocket pelo nginx é a fonte número um de falha silenciosa nesse tipo de stack. O CORS do backend libera `5173`, `8080` e `8090`.
+O browser fala com a API **direto** em `http://localhost:3001` — não há proxy reverso na frente dela. Isso é deliberado: proxiar o upgrade do WebSocket pelo nginx é a fonte número um de falha silenciosa nesse tipo de stack. O CORS do backend libera `5173`, `8080` e `8090` — e precisa declarar `methods` explicitamente, porque o default do `@fastify/cors` (`GET,HEAD,POST`) reprova PATCH e DELETE no preflight e derruba o drag-and-drop no browser.
 
 O frontend lê a base da API de `VITE_API_URL` (default `http://localhost:3001`). Como o Vite injeta env vars em build time, o `docker-compose.yml` passa isso como build arg, não como variável de runtime.
 

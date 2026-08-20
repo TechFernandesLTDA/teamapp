@@ -66,3 +66,37 @@ Toda mensagem é `{ type, payload }`. O broadcast vai para **todos** os clientes
 | `card.deleted` | `{ id }` |
 
 Se a conexão cair, o cliente deve reconectar com backoff e refazer `GET /api/board` ao reconectar — eventos perdidos durante a queda não são reenviados.
+
+## Detalhes que o contrato não dizia (fechados após o QA)
+
+**Envelope de erro vale para TODA falha**, não só as das rotas. JSON malformado, rota
+inexistente e payload grande demais também respondem `{ "error": "..." }`. O Fastify por
+default responde `{statusCode, code, error, message}` nesses casos pré-rota — o cliente lê
+`.error` e mostraria `"Bad Request"` em vez da mensagem útil. Por isso `setErrorHandler` e
+`setNotFoundHandler` são registrados **antes** das rotas em `backend/src/server.ts`: um
+handler registrado depois não é herdado pelos contextos já registrados.
+
+**CORS precisa declarar os métodos explicitamente.** O default do `@fastify/cors` é
+`GET,HEAD,POST` — PATCH e DELETE são reprovados no preflight, o que mata `moveCard`,
+`updateCard`, `deleteCard`, `deleteList` e `renameList` no browser. Liberar só a origem não
+basta. `curl` não aplica CORS, então um smoke test feito só com curl passa com isso
+totalmente quebrado; `backend/scripts/smoke.mjs` agora testa o preflight de cada método.
+
+**Empate de `position` desempata por `id`.** `orderBy: [{position}, {id}]` — sem isso, dois
+cards com a mesma position saem em ordem arbitrária do SQLite e o board "embaralha" sozinho
+entre dois GETs.
+
+**Limite conhecido da position fracionária:** entre dois inteiros vizinhos cabem ~53
+divisões pela metade antes do float esgotar a precisão e os valores empatarem. Não há
+rebalanceamento. Na prática só se chega lá arrastando repetidamente para o mesmo ponto
+milhares de vezes; se virar problema, a saída é reescrever a coluna com posições inteiras.
+
+**`PATCH /api/cards/:id` ignora `listId` e `position` em silêncio.** Só `title` e
+`description` são aplicados. Para mover, use `PATCH /api/cards/:id/move`.
+
+**WebSocket é só servidor → cliente.** Mensagens enviadas pelo cliente são ignoradas (não
+há `socket.on('message')` no servidor). Conexões de origem não listada são fechadas com
+código `1008`; conexões sem header `Origin` (curl, scripts) são aceitas.
+
+**`POST` calcula a próxima position como "última + 1"** sobre o valor fracionário — depois
+de um card em `7.125`, o próximo nasce em `8.125`.

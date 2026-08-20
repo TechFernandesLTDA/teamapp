@@ -30,6 +30,8 @@ export const api = {
 
   createList: (title: string) => request<List>('POST', '/api/lists', { title }),
   renameList: (id: string, title: string) => request<List>('PATCH', `/api/lists/${id}`, { title }),
+  moveList: (id: string, position: number) =>
+    request<List>('PATCH', `/api/lists/${id}`, { position }),
   deleteList: (id: string) => request<void>('DELETE', `/api/lists/${id}`),
 
   createCard: (listId: string, title: string) =>
@@ -43,11 +45,13 @@ export const api = {
 
 /**
  * Position fracionaria: uma unica linha e gravada por drag -- ver CLAUDE.md.
- * `cards` e a lista de destino ja ordenada; `index` e o slot onde o card cai.
+ * `siblings` e a sequencia de destino ja ordenada e ja *sem* o item arrastado;
+ * `index` e o slot onde ele cai. Serve para cards e para listas -- as duas usam
+ * a mesma semantica de position, entao a matematica e uma so.
  */
-export function positionFor(cards: Card[], index: number): number {
-  const before = cards[index - 1]
-  const after = cards[index]
+export function positionFor(siblings: { position: number }[], index: number): number {
+  const before = siblings[index - 1]
+  const after = siblings[index]
 
   if (!before && !after) return 0
   if (!before) return after.position - 1

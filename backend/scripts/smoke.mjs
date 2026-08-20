@@ -112,6 +112,66 @@ async function main() {
     movedEvent ? JSON.stringify(movedEvent.payload) : 'evento ausente',
   )
 
+  // --- Preflight de CORS ---
+  // Estas assercoes existem porque o smoke original passava 27/27 com o
+  // drag-and-drop 100% quebrado no browser: curl nao aplica CORS, e o default
+  // do @fastify/cors ('GET,HEAD,POST') reprovava PATCH e DELETE no preflight.
+  const ORIGIN = 'http://localhost:8090'
+
+  async function preflight(method, path) {
+    const res = await fetch(BASE + path, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: ORIGIN,
+        'Access-Control-Request-Method': method,
+        'Access-Control-Request-Headers': 'content-type',
+      },
+    })
+    return {
+      origin: res.headers.get('access-control-allow-origin'),
+      methods: (res.headers.get('access-control-allow-methods') ?? '').toUpperCase(),
+    }
+  }
+
+  for (const [method, path] of [
+    ['PATCH', `/api/cards/${cardId}/move`],
+    ['PATCH', `/api/cards/${cardId}`],
+    ['DELETE', `/api/cards/${cardId}`],
+    ['DELETE', `/api/lists/${listId}`],
+    ['POST', '/api/cards'],
+  ]) {
+    const { origin, methods } = await preflight(method, path)
+    check(
+      `preflight ${method} ${path.replace(/\/[a-z0-9]{20,}/g, '/:id')} permite a origem`,
+      origin === ORIGIN,
+      `allow-origin: ${origin}`,
+    )
+    check(`preflight libera ${method}`, methods.includes(method), `allow-methods: ${methods}`)
+  }
+
+  const evil = await fetch(BASE + '/api/board', { headers: { Origin: 'http://evil.example' } })
+  check(
+    'origem nao listada nao recebe allow-origin',
+    !evil.headers.get('access-control-allow-origin'),
+  )
+
+  // --- Envelope de erro ---
+  // docs/API.md promete { error } em TODA falha, inclusive nas pre-rota.
+  const notFound = await api('GET', '/api/rota-que-nao-existe')
+  check('404 de rota inexistente usa envelope { error }', typeof notFound.body?.error === 'string')
+
+  const malformed = await fetch(BASE + '/api/lists', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{isso nao e json',
+  })
+  const malformedBody = await malformed.json()
+  check(
+    'JSON malformado usa envelope { error }',
+    typeof malformedBody?.error === 'string' && malformedBody.statusCode === undefined,
+    JSON.stringify(malformedBody),
+  )
+
   const del = await api('DELETE', `/api/cards/${cardId}`)
   check('DELETE /api/cards/:id -> 204', del.status === 204)
 
