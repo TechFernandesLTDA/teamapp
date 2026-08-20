@@ -1,0 +1,36 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: "file:/data/dev.db"
+      PORT: "3001"
+      HOST: "0.0.0.0"
+    volumes:
+      # Volume nomeado, nao bind mount: file locking do SQLite sobre bind mount
+      # do Docker Desktop no Windows falha de forma intermitente.
+      - db-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3001/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # O browser do host resolve localhost:3001, nao o hostname da rede do compose.
+        VITE_API_URL: "http://localhost:3001"
+    ports:
+      - "8090:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db-data:

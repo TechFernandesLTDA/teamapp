@@ -1,0 +1,268 @@
+/* Bordas, botoes e title bars vem do 98.css. Aqui so layout. */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #008080; /* teal do desktop */
+  overflow: hidden;
+}
+
+.desktop {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.board-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  color: #fff;
+}
+
+.board-header h1 {
+  font-size: 16px;
+  margin: 0;
+  text-shadow: 1px 1px 0 #00000080;
+}
+
+.status {
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid #00000060;
+}
+
+.status.online {
+  background: #c0c0c0;
+  color: #006600;
+}
+
+.status.offline {
+  background: #c0c0c0;
+  color: #a00;
+}
+
+.error-bar {
+  margin: 0 12px 8px;
+}
+
+.error-bar .window-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.board {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 0 12px 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.list {
+  width: 240px;
+  flex: 0 0 240px;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.list-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.empty {
+  color: #666;
+  font-style: italic;
+  margin: 4px 0;
+  padding: 4px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #808080;
+  box-shadow: 1px 1px 0 #000;
+  padding: 6px 24px 6px 6px;
+  cursor: grab;
+  position: relative;
+  word-break: break-word;
+}
+
+.card.dragging {
+  opacity: 0.4;
+}
+
+/* Indicador de onde o card vai cair. */
+.card.drop-here {
+  border-top: 3px solid #000080;
+}
+
+.empty.drop-here {
+  outline: 2px dashed #000080;
+}
+
+.card-delete {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.add-card {
+  margin-top: 4px;
+}
+
+.taskbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  background: #c0c0c0;
+  border-top: 2px solid #fff;
+}
+
+.taskbar .start {
+  font-weight: bold;
+}
+
+.taskbar-item {
+  border: 1px solid #808080;
+  box-shadow: inset 1px 1px 0 #000;
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
+.tray {
+  margin-left: auto;
+  border: 1px solid #808080;
+  box-shadow: inset 1px 1px 0 #000;
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
+.crash {
+  width: 380px;
+  margin: 80px auto;
+}
+
+.crash-detail {
+  font-family: monospace;
+  font-size: 11px;
+  word-break: break-all;
+  color: #a00;
+}
+
+/* --- formularios inline (no lugar de window.prompt) --- */
+
+.add-list,
+.add-card {
+  display: flex;
+  gap: 4px;
+}
+
+.add-list input {
+  width: 150px;
+}
+
+.add-card {
+  margin-top: 4px;
+}
+
+.add-card input {
+  flex: 1;
+  min-width: 0;
+}
+
+.rename-row {
+  padding: 4px;
+  background: #c0c0c0;
+}
+
+.rename-row input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.board-empty {
+  color: #fff;
+  font-style: italic;
+}
+
+/* --- drop zone do fim da lista --- */
+
+.drop-end {
+  min-height: 14px;
+  flex: 0 0 auto;
+}
+
+.drop-end.drop-here {
+  border-top: 3px solid #000080;
+}
+
+/* --- card com descricao --- */
+
+.card-title {
+  display: block;
+  padding-right: 12px;
+}
+
+.card-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  background: #000080;
+}
+
+/* --- dialogo de propriedades do card --- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #00000040;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.dialog {
+  width: 340px;
+  max-width: calc(100vw - 24px);
+}
+
+.dialog textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.dialog-buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.dialog-buttons .danger {
+  margin-right: auto;
+}

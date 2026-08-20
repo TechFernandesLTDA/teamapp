@@ -1,0 +1,34 @@
+{
+  "name": "teamapp-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "seed": "tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.0.1",
+    "@fastify/websocket": "^11.0.2",
+    "@prisma/client": "^6.3.1",
+    "fastify": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "@types/ws": "^8.18.1",
+    "prisma": "^6.3.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "allowScripts": {
+    "@prisma/engines@6.19.3": true,
+    "esbuild@0.28.2": true,
+    "prisma@6.19.3": true,
+    "@prisma/client@6.19.3": true
+  }
+}

@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Board {
+  id    String @id @default(cuid())
+  slug  String @unique
+  title String
+  lists List[]
+}
+
+model Card {
+  id          String @id @default(cuid())
+  title       String
+  description String @default("")
+  position    Float
+  listId      String
+  list        List   @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@index([listId, position])
+}
+
+model List {
+  id       String @id @default(cuid())
+  title    String
+  position Float
+  boardId  String
+  board    Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  cards    Card[]
+
+  @@index([boardId, position])
+}
