@@ -1,4 +1,4 @@
-import type { Board, Card, List } from './types'
+import type { Board, Card, List, Trash, TrashCounts } from './types'
 
 export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
 export const WS_URL = API_URL.replace(/^http/, 'ws') + '/ws'
@@ -40,7 +40,18 @@ export const api = {
     request<Card>('PATCH', `/api/cards/${id}`, patch),
   moveCard: (id: string, listId: string, position: number) =>
     request<Card>('PATCH', `/api/cards/${id}/move`, { listId, position }),
+  // Manda para a lixeira -- nao apaga. O evento continua sendo card.deleted { id }.
   deleteCard: (id: string) => request<void>('DELETE', `/api/cards/${id}`),
+
+  // --- Lixeira ---
+  getTrash: () => request<Trash>('GET', '/api/trash'),
+  // Restaurar reusa card.created/list.created: o reducer ja faz upsert por id,
+  // entao o item reaparece no board sem tratamento especial.
+  restoreCard: (id: string) => request<Card>('POST', `/api/trash/cards/${id}/restore`),
+  restoreList: (id: string) => request<List>('POST', `/api/trash/lists/${id}/restore`),
+  purgeCard: (id: string) => request<void>('DELETE', `/api/trash/cards/${id}`),
+  purgeList: (id: string) => request<void>('DELETE', `/api/trash/lists/${id}`),
+  emptyTrash: () => request<{ deleted: TrashCounts }>('DELETE', '/api/trash'),
 }
 
 /**

@@ -17,11 +17,16 @@ function reduce(board: Board, event: ServerEvent): Board {
       const incoming = event.payload
       const exists = board.lists.some((l) => l.id === incoming.id)
       const lists = exists
-        ? board.lists.map((l) =>
-            // Preserva os cards locais: list.updated pode nao trazer os mesmos.
-            l.id === incoming.id ? { ...l, ...incoming, cards: incoming.cards ?? l.cards } : l,
-          )
-        : [...board.lists, { ...incoming, cards: incoming.cards ?? [] }]
+        ? board.lists.map((l) => {
+            if (l.id !== incoming.id) return l
+            // `?? l.cards` nao servia: [] nao e nullish, entao um list.updated com
+            // cards vazio zerava a lista. Um payload SEM a chave preserva o local;
+            // com a chave (mesmo vazia) manda -- e o caso do restore, que traz os
+            // cards de volta de proposito.
+            const cards = 'cards' in incoming ? incoming.cards : l.cards
+            return { ...l, ...incoming, cards: byPosition(cards) }
+          })
+        : [...board.lists, { ...incoming, cards: byPosition(incoming.cards ?? []) }]
       return { ...board, lists: byPosition(lists) }
     }
 
@@ -31,6 +36,9 @@ function reduce(board: Board, event: ServerEvent): Board {
     case 'card.created':
     case 'card.updated': {
       const card = event.payload
+      // Lista desconhecida: mesma situacao do card.moved orfao. O card nao tem
+      // onde entrar, entao marca para recarregar em vez de sumir.
+      if (!board.lists.some((l) => l.id === card.listId)) return { ...board, stale: true }
       const lists = board.lists.map((list) => {
         const without = list.cards.filter((c) => c.id !== card.id)
         if (list.id !== card.listId) {
@@ -45,7 +53,10 @@ function reduce(board: Board, event: ServerEvent): Board {
     case 'card.moved': {
       const { id, listId, position } = event.payload
       const existing = board.lists.flatMap((l) => l.cards).find((c) => c.id === id)
-      if (!existing) return board
+      // Card que este cliente nao conhece: aconteceu fora da nossa visao (criado
+      // e movido entre dois GETs, ou restaurado da lixeira). Descartar em silencio
+      // deixava o board errado ate o proximo reload -- sinaliza para recarregar.
+      if (!existing) return { ...board, stale: true }
       const moved: Card = { ...existing, listId, position }
       const lists = board.lists.map((list) => {
         const without = list.cards.filter((c) => c.id !== id)
@@ -56,6 +67,11 @@ function reduce(board: Board, event: ServerEvent): Board {
       })
       return { ...board, lists }
     }
+
+    // So a contagem muda -- o conteudo da lixeira vem de GET /api/trash quando
+    // a janela abre. Nao ha nada de board para reduzir aqui.
+    case 'trash.updated':
+      return { ...board, trash: event.payload }
 
     case 'card.deleted': {
       const { id } = event.payload
@@ -79,13 +95,23 @@ export function useBoard() {
   const [connected, setConnected] = useState(false)
   const socketRef = useRef<WebSocket | null>(null)
 
+  // Geracao do load: um GET /api/board em voo pode terminar DEPOIS de eventos WS
+  // que ja aplicamos, e sobrescrever o estado mais novo com o mais velho. A janela
+  // e pequena mas real justamente na reconexao, que e quando o load() roda.
+  const generation = useRef(0)
+
   const load = useCallback(async () => {
+    const mine = ++generation.current
     try {
       const fresh = await api.getBoard()
+      // Outro load comecou enquanto este estava em voo: a resposta dele e mais
+      // nova que a nossa, entao esta aqui esta obsoleta.
+      if (mine !== generation.current) return
       fresh.lists = byPosition(fresh.lists).map((l: List) => ({ ...l, cards: byPosition(l.cards) }))
       setBoard(fresh)
       setError(null)
     } catch (e) {
+      if (mine !== generation.current) return
       setError(e instanceof Error ? e.message : String(e))
     }
   }, [])
@@ -93,6 +119,13 @@ export function useBoard() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // O reducer marca `stale` quando recebe um evento sobre algo que ele nao
+  // conhece (ver card.moved/card.created orfaos). Ele nao pode chamar load()
+  // sozinho -- e uma funcao pura -- entao o efeito faz a recarga.
+  useEffect(() => {
+    if (board?.stale) void load()
+  }, [board?.stale, load])
 
   useEffect(() => {
     let closedByUnmount = false
