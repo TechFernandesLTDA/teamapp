@@ -11,6 +11,10 @@ export type EventType =
   // Lixeira: o payload e so a contagem ({ cards, lists }), para o icone do desktop
   // saber se ela esta cheia. O conteudo vem de GET /api/trash quando a janela abre.
   | 'trash.updated'
+  // Visualizador de Eventos: o payload e a linha de log inteira
+  // ({ id, type, summary, createdAt }), ja com o texto formatado. E append-only,
+  // entao o cliente pode so empilhar -- nao ha upsert por id a fazer aqui.
+  | 'activity.recorded'
 
 const clients = new Set<WebSocket>()
 

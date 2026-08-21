@@ -8,8 +8,25 @@ body,
 }
 
 body {
-  background: #008080; /* teal do desktop */
+  /* O tema escreve --desktop-bg em :root; o fallback e o teal padrao do
+     Windows 95, para a app funcionar antes do JS aplicar o tema. */
+  background: var(--desktop-bg, #008080);
   overflow: hidden;
+}
+
+/* Trocar tema significa sobrescrever o que o 98.css assume fixo. Aplicado com
+   moderacao: so a barra de titulo e o fundo, que e o que muda de verdade entre
+   os esquemas de cor originais. */
+.title-bar {
+  background: linear-gradient(
+    90deg,
+    var(--title-from, #000080),
+    var(--title-to, #1084d0)
+  ) !important;
+}
+
+.title-bar-text {
+  color: var(--title-text, #fff) !important;
 }
 
 .desktop {
@@ -720,4 +737,66 @@ body {
   margin: 3px 2px;
   border-top: 1px solid #808080;
   border-bottom: 1px solid #fff;
+}
+
+/* Seletor de tema no menu Iniciar: submenu que abre ao lado. */
+.theme-submenu {
+  padding-left: 12px;
+}
+
+.theme-submenu button {
+  font-size: 11px;
+}
+
+.theme-active::before {
+  content: '2 ';
+}
+
+.start-label {
+  display: block;
+  padding: 3px 18px;
+  color: #555;
+  font-size: 11px;
+}
+
+/* --- Visualizador de Eventos --- */
+.event-list {
+  height: 260px;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #808080;
+  box-shadow: inset 1px 1px 0 #000, inset -1px -1px 0 #dfdfdf;
+}
+
+.event-list table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.event-list th {
+  position: sticky;
+  top: 0;
+  background: #c0c0c0;
+  border: 1px solid #808080;
+  box-shadow: inset 1px 1px 0 #fff;
+  padding: 2px 6px;
+  text-align: left;
+  font-weight: normal;
+}
+
+.event-list td {
+  padding: 2px 6px;
+  border-bottom: 1px solid #efefef;
+  vertical-align: top;
+}
+
+.event-icon {
+  width: 22px;
+  line-height: 0;
+}
+
+.event-time {
+  white-space: nowrap;
+  color: #555;
 }

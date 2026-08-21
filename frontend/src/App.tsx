@@ -18,6 +18,8 @@ import type { MenuState } from './ContextMenu'
 import { Notepad } from './Notepad'
 import { SystemProperties } from './SystemProperties'
 import { useSounds } from './useSounds'
+import { useTheme } from './useTheme'
+import { EventViewer } from './EventViewer'
 import { TrashEmptyIcon, TrashFullIcon, WindowsFlagIcon } from './icons'
 import type { List } from './types'
 
@@ -56,7 +58,9 @@ export default function App() {
   const undo = useUndo()
   const [notepadOpen, setNotepadOpen] = useState(false)
   const [sysPropsOpen, setSysPropsOpen] = useState(false)
+  const [eventsOpen, setEventsOpen] = useState(false)
   const sounds = useSounds()
+  const { theme, setTheme, themes } = useTheme()
 
   // Relogio da bandeja. 10s em vez de 1s: o display so mostra hora e minuto,
   // entao segundo a segundo seria render descartado.
@@ -98,6 +102,7 @@ export default function App() {
     helpOpen ||
     notepadOpen ||
     sysPropsOpen ||
+    eventsOpen ||
     confirmation !== null
   useHotkeys(
     {
@@ -391,6 +396,10 @@ export default function App() {
         />
       )}
 
+      {eventsOpen && (
+        <EventViewer onClose={() => setEventsOpen(false)} onConfirm={setConfirmation} />
+      )}
+
       {trashOpen && (
         <TrashWindow
           onClose={() => setTrashOpen(false)}
@@ -553,6 +562,17 @@ export default function App() {
                 <button
                   onClick={() => {
                     setStartOpen(false)
+                    setEventsOpen(true)
+                    sounds.play('chord')
+                  }}
+                >
+                  Visualizador de Eventos
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => {
+                    setStartOpen(false)
                     setSysPropsOpen(true)
                   }}
                 >
@@ -568,6 +588,25 @@ export default function App() {
                 >
                   Som: {sounds.enabled ? 'ligado' : 'desligado'}
                 </button>
+              </li>
+              <li className="start-separator" />
+              <li>
+                <span className="start-label">Esquema de cores</span>
+                <ul className="theme-submenu">
+                  {(Object.keys(themes) as (keyof typeof themes)[]).map((name) => (
+                    <li key={name}>
+                      <button
+                        className={theme === name ? 'theme-active' : undefined}
+                        onClick={() => {
+                          setTheme(name)
+                          sounds.play('ding')
+                        }}
+                      >
+                        {themes[name].label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </li>
               <li>
                 <button

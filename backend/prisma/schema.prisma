@@ -21,6 +21,10 @@ model Card {
   position    Float
   listId      String
   list        List      @relation(fields: [listId], references: [id], onDelete: Cascade)
+  // GET /api/stats precisa de oldestCard/newestCard, e "mais antigo" so existe se
+  // a linha souber quando nasceu. cuid() e ordenavel por tempo, mas so por acaso
+  // de implementacao -- nao da para ordenar por ele e chamar de data.
+  createdAt   DateTime  @default(now())
   // Lixeira: null = no board, timestamp = na lixeira. DELETE /api/cards/:id
   // marca; DELETE /api/trash/... e que apaga de verdade.
   deletedAt   DateTime?
@@ -43,4 +47,17 @@ model List {
 
   @@index([boardId, position])
   @@index([deletedAt])
+}
+
+/// O Visualizador de Eventos do Windows 95: uma linha por mutacao, so texto ja
+/// formatado. NAO ha FK para Card/List de proposito -- o log tem que sobreviver
+/// ao "Esvaziar Lixeira", que apaga as linhas de verdade; um onDelete: Cascade
+/// levaria junto exatamente o historico que se quer consultar depois.
+model Activity {
+  id        String   @id @default(cuid())
+  type      String
+  summary   String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }

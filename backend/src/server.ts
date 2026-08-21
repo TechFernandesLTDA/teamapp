@@ -8,6 +8,8 @@ import { boardRoutes } from './routes/board.js'
 import { listRoutes } from './routes/lists.js'
 import { cardRoutes } from './routes/cards.js'
 import { trashRoutes } from './routes/trash.js'
+import { activityRoutes } from './routes/activity.js'
+import { statsRoutes } from './routes/stats.js'
 
 const PORT = Number(process.env.PORT ?? 3001)
 const HOST = process.env.HOST ?? '0.0.0.0'
@@ -70,6 +72,8 @@ await app.register(boardRoutes)
 await app.register(listRoutes)
 await app.register(cardRoutes)
 await app.register(trashRoutes)
+await app.register(activityRoutes)
+await app.register(statsRoutes)
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, async () => {
