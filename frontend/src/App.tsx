@@ -15,6 +15,9 @@ import { ScreenSaver } from './ScreenSaver'
 import { useUndo } from './useUndo'
 import { ContextMenu } from './ContextMenu'
 import type { MenuState } from './ContextMenu'
+import { Notepad } from './Notepad'
+import { SystemProperties } from './SystemProperties'
+import { useSounds } from './useSounds'
 import { TrashEmptyIcon, TrashFullIcon, WindowsFlagIcon } from './icons'
 import type { List } from './types'
 
@@ -51,6 +54,9 @@ export default function App() {
   const newListRef = useRef<HTMLInputElement>(null)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const undo = useUndo()
+  const [notepadOpen, setNotepadOpen] = useState(false)
+  const [sysPropsOpen, setSysPropsOpen] = useState(false)
+  const sounds = useSounds()
 
   // Relogio da bandeja. 10s em vez de 1s: o display so mostra hora e minuto,
   // entao segundo a segundo seria render descartado.
@@ -85,7 +91,14 @@ export default function App() {
 
   // Qualquer janela aberta desliga os atalhos: senao "n" digitado num dialogo
   // criaria uma lista no board por tras dele.
-  const modalOpen = minesweeperOpen || trashOpen || aboutOpen || helpOpen || confirmation !== null
+  const modalOpen =
+    minesweeperOpen ||
+    trashOpen ||
+    aboutOpen ||
+    helpOpen ||
+    notepadOpen ||
+    sysPropsOpen ||
+    confirmation !== null
   useHotkeys(
     {
       n: () => newListRef.current?.focus(),
@@ -123,6 +136,20 @@ export default function App() {
   // Derivado do board, nao copiado: o eco do WebSocket atualiza o dialogo aberto.
   const openCard = board.lists.flatMap((l) => l.cards).find((c) => c.id === openCardId) ?? null
 
+  // Envelope unico em volta do `run`: assim nenhuma chamada individual precisa
+  // lembrar de tocar som, e o som de erro acompanha qualquer falha de API.
+  const runWithSound = (action: () => Promise<unknown>, ok: 'ding' | 'recycle' = 'ding') =>
+    void run(async () => {
+      try {
+        const result = await action()
+        sounds.play(ok)
+        return result
+      } catch (e) {
+        sounds.play('error')
+        throw e
+      }
+    })
+
   const endDrag = () => {
     setDrag(null)
     setCardDropTarget(null)
@@ -133,7 +160,7 @@ export default function App() {
     e.preventDefault()
     const title = newList.trim()
     if (!title) return
-    void run(() => api.createList(title))
+    runWithSound(() => api.createList(title))
     setNewList('')
   }
 
@@ -195,7 +222,7 @@ export default function App() {
             { kind: 'item', label: 'Atualizar', onClick: () => void reload() },
             { kind: 'item', label: 'Abrir a Lixeira', onClick: () => setTrashOpen(true) },
             { kind: 'separator' },
-            { kind: 'item', label: 'Propriedades', onClick: () => setAboutOpen(true) },
+            { kind: 'item', label: 'Propriedades', onClick: () => setSysPropsOpen(true) },
           ],
         })
       }}
@@ -294,13 +321,13 @@ export default function App() {
               if (/campo minado/i.test(card.title)) return setMinesweeperOpen(true)
               setOpenCardId(card.id)
             }}
-            onAddCard={(listId, title) => void run(() => api.createCard(listId, title))}
+            onAddCard={(listId, title) => runWithSound(() => api.createCard(listId, title))}
             onRename={(l, title) => void run(() => api.renameList(l.id, title))}
             onDelete={(l) =>
               setConfirmation({
                 title: 'Apagar lista',
                 message: `Mandar "${l.title}" e seus ${l.cards.length} card(s) para a Lixeira?`,
-                onYes: () => void run(() => api.deleteList(l.id)),
+                onYes: () => runWithSound(() => api.deleteList(l.id), 'recycle'),
               })
             }
           />
@@ -321,7 +348,7 @@ export default function App() {
               title: 'Apagar card',
               message: `Mandar o card "${openCard.title}" para a Lixeira?`,
               onYes: () => {
-                void run(() => api.deleteCard(openCard.id))
+                runWithSound(() => api.deleteCard(openCard.id), 'recycle')
                 setOpenCardId(null)
               },
             })
@@ -330,6 +357,39 @@ export default function App() {
       )}
 
       {minesweeperOpen && <Minesweeper onClose={() => setMinesweeperOpen(false)} />}
+
+      {notepadOpen && (
+        <Notepad
+          initialText={`Anotacoes de ${board.title}\r\n\r\n`}
+          title="Anotacoes"
+          // O Bloco de Notas nao tem persistencia no servidor: nao ha recurso de
+          // "nota" no contrato da API, e inventar um so para isso seria mudanca
+          // de contrato por conta propria. Fica no localStorage.
+          onSave={(text) => {
+            try {
+              localStorage.setItem('teamapp95.notepad', text)
+            } catch {
+              /* modo privado: perde a nota, nao quebra a app */
+            }
+            sounds.play('ding')
+          }}
+          onClose={() => setNotepadOpen(false)}
+        />
+      )}
+
+      {sysPropsOpen && (
+        <SystemProperties
+          stats={{
+            lists: board.lists.length,
+            cards: cardCount,
+            trashed: trashCount,
+            apiUrl: API_URL,
+            connected,
+            boardTitle: board.title,
+          }}
+          onClose={() => setSysPropsOpen(false)}
+        />
+      )}
 
       {trashOpen && (
         <TrashWindow
@@ -451,9 +511,21 @@ export default function App() {
                   onClick={() => {
                     setStartOpen(false)
                     setMinesweeperOpen(true)
+                    sounds.play('chord')
                   }}
                 >
                   Campo Minado
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => {
+                    setStartOpen(false)
+                    setNotepadOpen(true)
+                    sounds.play('chord')
+                  }}
+                >
+                  Bloco de Notas
                 </button>
               </li>
               <li>
@@ -475,6 +547,26 @@ export default function App() {
                   }}
                 >
                   Atalhos de teclado
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => {
+                    setStartOpen(false)
+                    setSysPropsOpen(true)
+                  }}
+                >
+                  Propriedades do Sistema
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => {
+                    setStartOpen(false)
+                    sounds.toggle()
+                  }}
+                >
+                  Som: {sounds.enabled ? 'ligado' : 'desligado'}
                 </button>
               </li>
               <li>

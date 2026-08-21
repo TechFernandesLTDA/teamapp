@@ -1,0 +1,163 @@
+/* O 98.css nao tem barra de menu nem menu suspenso -- so janela, botao e campo.
+   Entao aqui o CSS proprio e legitimo. Tudo com prefixo .np- para nao vazar no
+   styles.css compartilhado. */
+
+.np-root {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* --- barra de menu --- */
+
+.np-menubar {
+  display: flex;
+  gap: 0;
+  /* A barra de menu do Win95 fica rente ao topo do corpo da janela, sem relevo. */
+  margin: -4px 0 2px -4px;
+}
+
+.np-menu {
+  position: relative;
+}
+
+/* O botao do 98.css vem com bevel, min-width 75px e a gambiarra do
+   `color: transparent` + text-shadow. Um titulo de menu precisa ser plano, e
+   ao anular a cor e preciso anular o text-shadow tambem, senao o texto some. */
+.np-menu-title {
+  min-width: 0;
+  min-height: 0;
+  padding: 3px 8px;
+  background: transparent;
+  box-shadow: none;
+  color: #222;
+  text-shadow: none;
+}
+
+.np-menu-title:focus {
+  outline: none;
+}
+
+.np-menu-title:hover,
+.np-menu-title.np-open {
+  background: #000080;
+  color: #fff;
+}
+
+.np-menu-title:not(:disabled):active {
+  box-shadow: none;
+  text-shadow: none;
+}
+
+/* --- menu suspenso --- */
+
+.np-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  min-width: 210px;
+  padding: 2px;
+  background: #c0c0c0;
+  /* Mesmo relevo de janela levantada que o 98.css aplica em .window. */
+  box-shadow:
+    inset -1px -1px #0a0a0a,
+    inset 1px 1px #dfdfdf,
+    inset -2px -2px #808080,
+    inset 2px 2px #fff;
+}
+
+.np-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 3px 6px;
+  background: transparent;
+  box-shadow: none;
+  color: #222;
+  text-shadow: none;
+  text-align: left;
+}
+
+.np-item:focus {
+  outline: none;
+}
+
+.np-item:not(:disabled):hover {
+  background: #000080;
+  color: #fff;
+}
+
+.np-item:not(:disabled):active {
+  box-shadow: none;
+  text-shadow: none;
+}
+
+.np-item:disabled {
+  color: #808080;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.np-check {
+  width: 14px;
+  flex: 0 0 14px;
+}
+
+.np-label {
+  flex: 1 1 auto;
+}
+
+/* O atalho fica encostado a direita, cinza, como nos menus originais. */
+.np-hint {
+  margin-left: 18px;
+  opacity: 0.75;
+}
+
+.np-sep {
+  height: 2px;
+  margin: 3px 2px;
+  border-top: 1px solid #808080;
+  border-bottom: 1px solid #fff;
+}
+
+/* --- area de edicao --- */
+
+.np-area {
+  height: 320px;
+  /* O afundado ja vem do 98.css; qualquer borda aqui duplicaria o relevo. */
+  border: none;
+  resize: none;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* Sem quebra automatica o texto precisa rolar na horizontal; so o atributo
+   wrap="off" nao garante isso em todos os motores. */
+.np-area[wrap="off"] {
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.np-status {
+  margin-top: 4px;
+}
+
+/* --- segundo estado: aviso de alteracoes nao salvas --- */
+
+.np-ask {
+  padding: 8px 4px;
+}
+
+.np-ask-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+}
+
+.np-ask-body p {
+  margin: 0;
+}

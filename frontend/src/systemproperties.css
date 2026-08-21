@@ -1,0 +1,97 @@
+/* As abas e a barra de progresso segmentada vem do 98.css (menu[role=tablist],
+   .window[role=tabpanel], .progress-indicator.segmented). O que sobra aqui e
+   layout e ajuste de altura. Prefixo .sp- para nao vazar no styles.css. */
+
+.sp-root {
+  display: flex;
+  flex-direction: column;
+}
+
+/* O 98.css ja da o `margin-bottom: -2px` que cola a aba ativa no painel; aqui so
+   removemos a marca de lista, que o reset do navegador ainda pode desenhar. */
+.sp-tabs {
+  list-style: none;
+}
+
+.sp-panel {
+  /* Altura fixa nas duas abas: sem isso a janela pula de tamanho ao trocar de
+     aba, algo que uma folha de propriedades do Win95 nunca faz. */
+  min-height: 240px;
+}
+
+/* --- aba Geral --- */
+
+.sp-general {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.sp-general-text p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Rotulo de secao: negrito e um respiro em cima, como nas folhas originais. */
+.sp-heading {
+  font-weight: bold;
+  margin-top: 8px !important;
+}
+
+.sp-general-text .sp-heading:first-child {
+  margin-top: 0 !important;
+}
+
+.sp-mono {
+  font-family: "Courier New", Courier, monospace;
+}
+
+.sp-led {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  vertical-align: middle;
+  box-shadow:
+    inset -1px -1px #fff,
+    inset 1px 1px #808080;
+}
+
+.sp-led-on {
+  background: #00ff00;
+}
+
+.sp-led-off {
+  background: #ff0000;
+}
+
+/* --- aba Desempenho --- */
+
+.sp-perf p {
+  margin: 0 0 6px;
+}
+
+.sp-perf fieldset {
+  margin-top: 10px;
+}
+
+.sp-bar-row + .sp-bar-row {
+  margin-top: 10px;
+}
+
+.sp-bar-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
+
+/* A .progress-indicator do 98.css tem 32px, alta demais para tres barras
+   empilhadas dentro de um fieldset. */
+.sp-bar {
+  height: 20px;
+  width: 100%;
+}
+
+.sp-note {
+  margin-top: 10px !important;
+}
