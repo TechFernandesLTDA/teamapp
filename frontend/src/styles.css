@@ -652,3 +652,72 @@ body {
     animation: none;
   }
 }
+
+/* --- Desfazer e menu de contexto --- */
+.undo-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 44px;
+  transform: translateX(-50%);
+  z-index: 40;
+  min-width: 300px;
+}
+
+.undo-bar .window-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px;
+}
+
+.undo-bar span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 160px;
+  padding: 2px;
+}
+
+.context-menu ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 3px 18px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+/* Item destacado do menu do Win95: azul com texto branco, sem relevo. */
+.context-menu button:hover:not(:disabled),
+.context-menu button:focus-visible {
+  background: #000080;
+  color: #fff;
+  outline: none;
+}
+
+.context-menu button:disabled {
+  color: #808080;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.context-default {
+  font-weight: bold;
+}
+
+.context-separator {
+  height: 0;
+  margin: 3px 2px;
+  border-top: 1px solid #808080;
+  border-bottom: 1px solid #fff;
+}

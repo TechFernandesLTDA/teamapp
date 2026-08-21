@@ -12,6 +12,9 @@ import { TrashWindow } from './TrashWindow'
 import { Minesweeper } from './Minesweeper'
 import { useHotkeys } from './useHotkeys'
 import { ScreenSaver } from './ScreenSaver'
+import { useUndo } from './useUndo'
+import { ContextMenu } from './ContextMenu'
+import type { MenuState } from './ContextMenu'
 import { TrashEmptyIcon, TrashFullIcon, WindowsFlagIcon } from './icons'
 import type { List } from './types'
 
@@ -46,6 +49,8 @@ export default function App() {
   const [clock, setClock] = useState(() => new Date())
   const searchRef = useRef<HTMLInputElement>(null)
   const newListRef = useRef<HTMLInputElement>(null)
+  const [menu, setMenu] = useState<MenuState | null>(null)
+  const undo = useUndo()
 
   // Relogio da bandeja. 10s em vez de 1s: o display so mostra hora e minuto,
   // entao segundo a segundo seria render descartado.
@@ -90,6 +95,7 @@ export default function App() {
       r: () => void reload(),
       '?': () => setHelpOpen(true),
       escape: () => setSearch(''),
+      'ctrl+z': () => void undo.run(),
     },
     !modalOpen && openCardId === null,
   )
@@ -134,11 +140,22 @@ export default function App() {
   const dropCard = (list: List, index: number) => {
     if (drag?.kind !== 'card') return
     const cardId = drag.id
+    // Origem capturada ANTES do move: depois dele o eco do WebSocket ja
+    // reescreveu o card e nao ha mais de onde tirar o lugar antigo.
+    const origin = board.lists
+      .flatMap((l) => l.cards)
+      .find((c) => c.id === cardId)
     // Tirar o proprio card antes de calcular evita que ele vire vizinho de si mesmo
     // -- sem isso, arrastar um slot para baixo cai de volta no lugar de origem.
     const neighbours = list.cards.filter((c) => c.id !== cardId)
     const slot = Math.min(index, neighbours.length)
     void run(() => api.moveCard(cardId, list.id, positionFor(neighbours, slot)))
+    if (origin && (origin.listId !== list.id || origin.position !== positionFor(neighbours, slot))) {
+      undo.offer({
+        label: `Card "${origin.title}" movido`,
+        undo: () => api.moveCard(cardId, origin.listId, origin.position),
+      })
+    }
     endDrag()
   }
 
@@ -162,7 +179,27 @@ export default function App() {
   const trashFull = trashCount > 0
 
   return (
-    <div className="desktop">
+    <div
+      className="desktop"
+      onContextMenu={(e) => {
+        // So o fundo: um clique direito sobre um card ou lista tem menu proprio
+        // (ou deve cair no menu nativo, se nao tiver).
+        if (e.target !== e.currentTarget) return
+        e.preventDefault()
+        setMenu({
+          x: e.clientX,
+          y: e.clientY,
+          items: [
+            { kind: 'item', label: 'Nova lista', bold: true, onClick: () => newListRef.current?.focus() },
+            { kind: 'separator' },
+            { kind: 'item', label: 'Atualizar', onClick: () => void reload() },
+            { kind: 'item', label: 'Abrir a Lixeira', onClick: () => setTrashOpen(true) },
+            { kind: 'separator' },
+            { kind: 'item', label: 'Propriedades', onClick: () => setAboutOpen(true) },
+          ],
+        })
+      }}
+    >
       <div className="board-header">
         <h1>{board.title}</h1>
         <span className={connected ? 'status online' : 'status offline'}>
@@ -356,6 +393,20 @@ export default function App() {
           </div>
         </Modal>
       )}
+
+      {undo.action && (
+        <div className="window undo-bar" role="status">
+          <div className="window-body">
+            <span>{undo.action.label}</span>
+            <button onClick={() => void undo.run()}>Desfazer (Ctrl+Z)</button>
+            <button onClick={undo.clear} aria-label="Dispensar">
+              X
+            </button>
+          </div>
+        </div>
+      )}
+
+      {menu && <ContextMenu state={menu} onClose={() => setMenu(null)} />}
 
       <ScreenSaver />
 
