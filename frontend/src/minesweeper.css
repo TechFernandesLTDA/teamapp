@@ -1,0 +1,144 @@
+/* O 98.css nao tem componente de grade nem display de 7 segmentos, entao aqui o
+   CSS proprio e legitimo. Tudo fica no prefixo .ms- para nao vazar no styles.css
+   compartilhado. */
+
+.ms-frame {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* Relevo afundado do "campo" do Campo Minado original. */
+  padding: 6px;
+  box-shadow:
+    inset 2px 2px 0 #808080,
+    inset -2px -2px 0 #fff;
+  background: #c0c0c0;
+}
+
+.ms-hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  box-shadow:
+    inset 2px 2px 0 #808080,
+    inset -2px -2px 0 #fff;
+}
+
+/* Display digital: numeros vermelhos em fundo preto. */
+.ms-display {
+  min-width: 44px;
+  padding: 1px 4px;
+  background: #000;
+  color: #f00;
+  font-family: 'Courier New', monospace;
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 1.15;
+  letter-spacing: 1px;
+  text-align: center;
+  border: 1px solid #808080;
+}
+
+/* Botao da carinha: o 98.css ja da o relevo de botao, so ajustamos o tamanho. */
+.ms-face {
+  min-width: 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.ms-board {
+  display: grid;
+  grid-template-columns: repeat(9, 22px);
+  grid-auto-rows: 22px;
+  gap: 0;
+  box-shadow:
+    inset 2px 2px 0 #808080,
+    inset -2px -2px 0 #fff;
+  padding: 3px;
+  width: max-content;
+  margin: 0 auto;
+}
+
+/* Celula fechada: relevo com claro em cima/esquerda e escuro embaixo/direita.
+   Usamos box-shadow inset em vez de border porque a troca fechada -> aberta
+   mudaria a espessura da borda e o grid inteiro tremeria a cada clique. */
+.ms-board .ms-cell {
+  width: 22px;
+  height: 22px;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  background: #c0c0c0;
+  border: none;
+  border-radius: 0;
+  box-shadow:
+    inset 2px 2px 0 #fff,
+    inset -2px -2px 0 #808080;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  font-weight: bold;
+  line-height: 1;
+  text-align: center;
+  cursor: default;
+  user-select: none;
+}
+
+.ms-board .ms-cell:focus-visible {
+  outline: 1px dotted #000;
+  outline-offset: -4px;
+}
+
+/* Celula aberta: afundada, so o fio cinza em cima/esquerda. */
+.ms-board .ms-cell.ms-revealed,
+.ms-board .ms-cell.ms-revealed:active {
+  box-shadow: inset 1px 1px 0 #808080;
+}
+
+.ms-board .ms-cell.ms-mine {
+  background: #f00;
+}
+
+/* Cores classicas dos numeros. */
+.ms-n1 {
+  color: #0000ff;
+}
+.ms-n2 {
+  color: #008000;
+}
+.ms-n3 {
+  color: #ff0000;
+}
+.ms-n4 {
+  color: #000080;
+}
+.ms-n5 {
+  color: #800000;
+}
+.ms-n6 {
+  color: #008080;
+}
+.ms-n7 {
+  color: #000000;
+}
+.ms-n8 {
+  color: #808080;
+}
+
+.ms-hint {
+  margin: 0;
+  font-size: 11px;
+  text-align: center;
+  color: #333;
+}
+
+/* A celula alterna entre numero (texto) e icone (SVG); sem line-height 0 no
+   caso do SVG o glifo empurra a grade e as celulas ficam de alturas diferentes. */
+.ms-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
