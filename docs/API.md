@@ -116,6 +116,25 @@ não funciona — use `DELETE /api/cards/:id`).
 #### `DELETE /api/trash`
 Esvaziar Lixeira. Apaga tudo de vez. `200 { deleted: { cards, lists } }` · evento `trash.updated`.
 
+### Log de atividade e estatisticas
+
+#### `GET /api/activity?limit=50`
+Log append-only de toda mutacao, mais recente primeiro. `limit` aceita 1..200
+(default 50); fora disso e `400`. Resposta: `{ items: [{ id, type, summary, createdAt }], limit, total }`.
+
+`summary` ja vem formatado (`Card "Gravar um CD-R" movido para "Feito"`) — o cliente
+imprime a frase, nunca a remonta a partir de ids.
+
+Gravar log **nunca derruba a mutacao principal**: se o insert falhar, o servidor loga
+e segue. Um log de auditoria que quebra a escrita e pior do que nao ter log.
+
+#### `DELETE /api/activity`
+Limpa o log. `200 { deleted: n }`. Idempotente.
+
+#### `GET /api/stats`
+`{ lists, cards, trashedCards, trashedLists, cardsPerList, oldestCard, newestCard, avgCardsPerList }`.
+Só conta itens vivos.
+
 ## WebSocket
 
 `ws://localhost:3001/ws`. Sem handshake, sem subscribe: ao conectar você recebe todo evento subsequente.
@@ -137,6 +156,7 @@ a regra de que o payload nunca é o estado todo.
 | `card.moved` | `{ id, listId, position }` |
 | `card.deleted` | `{ id }` |
 | `trash.updated` | `{ cards, lists }` — só a contagem |
+| `activity.recorded` | `{ id, type, summary, createdAt }` |
 
 Se a conexão cair, o cliente deve reconectar com backoff e refazer `GET /api/board` ao reconectar — eventos perdidos durante a queda não são reenviados.
 
@@ -173,3 +193,29 @@ código `1008`; conexões sem header `Origin` (curl, scripts) são aceitas.
 
 **`POST` calcula a próxima position como "última + 1"** sobre o valor fracionário — depois
 de um card em `7.125`, o próximo nasce em `8.125`.
+
+
+---
+
+## Concorrencia: `POST` serializa a leitura da position (2026-08-21)
+
+`POST /api/cards` e `POST /api/lists` calculam a position nova como "ultima + 1", o
+que exige **ler e inserir atomicamente**. Sem isso duas criacoes simultaneas leem a
+mesma "ultima" e nascem empatadas — 15 requisicoes em paralelo produziam 5 positions
+distintas.
+
+O empate nao e cosmetico: a partir de dois cards na mesma position, `positionFor()`
+calcula `(a + b) / 2 === a` para o slot entre eles. O servidor responde `200`, grava o
+valor recebido, e **o card nao sai do lugar**. Como o `orderBy` desempata por `id`, a
+ordem continua estavel e nada parece quebrado — o drag simplesmente para de funcionar.
+
+Uma transacao do Prisma nao resolve sozinha: no SQLite o `BEGIN` e deferido, o `SELECT`
+nao pega lock de escrita, e as duas transacoes leem antes de qualquer uma escrever.
+`backend/src/serialize.ts` enfileira por lista/board.
+
+**Limite conhecido:** e um mutex em memoria, valido enquanto houver **um processo** de
+backend — que e o modelo de implantacao aqui. Com mais de uma instancia o race volta, e
+a correcao passa a ser `INSERT ... SELECT MAX(position) + 1` numa unica declaracao, ou
+`UNIQUE(listId, position)` com retry.
+
+Coberto por `backend/scripts/ws-stress.mjs`, que roda no CI.

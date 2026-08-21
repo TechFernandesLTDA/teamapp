@@ -76,7 +76,7 @@ A consequência é que o cliente precisa aplicar todo evento como um **upsert id
 
 Formato: `{ "type": "card.moved", "payload": { ... } }`. O payload de movimento é só `{ id, listId, position }`, nunca o board inteiro.
 
-Eventos: `list.created`, `list.updated`, `list.deleted`, `card.created`, `card.updated`, `card.moved`, `card.deleted`, `trash.updated`.
+Eventos: `list.created`, `list.updated`, `list.deleted`, `card.created`, `card.updated`, `card.moved`, `card.deleted`, `trash.updated`, `activity.recorded`.
 
 ### A Lixeira: DELETE é soft delete
 
@@ -97,6 +97,16 @@ Restaurar reusa `card.created`/`list.created` em vez de inventar `*.restored`: o
 já aplica esses eventos como upsert por `id`, então o item reaparece sem mudança no
 reducer. `trash.updated` carrega **só a contagem** `{ cards, lists }` — o conteúdo vem de
 `GET /api/trash` quando a janela abre.
+
+### Concorrencia: ler-e-inserir precisa ser atomico
+
+Toda rota que calcula uma position a partir do estado atual (`POST /api/cards`,
+`POST /api/lists` — ambas fazem "ultima + 1") tem que envolver a leitura **e** a
+escrita em `serialize()` de `backend/src/serialize.ts`. Sem isso duas criacoes
+simultaneas leem a mesma "ultima" e nascem empatadas, e dois itens empatados
+tornam o drag entre eles inoperante: `positionFor()` devolve `(a+b)/2 === a`, o
+servidor responde 200 e o card nao se move. O desempate por `id` esconde o
+sintoma. Detalhes no fim de `docs/API.md`.
 
 ### API REST
 
@@ -119,6 +129,10 @@ POST   /api/trash/lists/:id/restore
 DELETE /api/trash/cards/:id           apaga de vez
 DELETE /api/trash/lists/:id           apaga de vez
 DELETE /api/trash                     esvaziar lixeira
+
+GET    /api/activity?limit=50         log de atividade, mais recente primeiro
+DELETE /api/activity                  limpa o log
+GET    /api/stats                     contagens e agregados do board
 ```
 
 `GET /api/board` é a única leitura de que o frontend precisa; depois dela o estado se mantém pelo WebSocket. Não crie endpoints `GET` por recurso individual sem necessidade real.
