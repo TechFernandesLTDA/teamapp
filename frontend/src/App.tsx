@@ -54,6 +54,30 @@ export default function App() {
     return () => clearInterval(tick)
   }, [])
 
+  // Busca por titulo e descricao. Devolve o conjunto de ids que casam em vez de
+  // filtrar as listas: esconder os cards que nao casam quebraria o drag-and-drop
+  // (as posicoes dos vizinhos mudariam) -- realcar preserva o board inteiro.
+  //
+  // Fica aqui em cima, junto dos outros hooks, e NAO depois do `if (!board)`:
+  // hook depois de return condicional muda a quantidade de hooks entre renders
+  // e o React derruba a arvore inteira (tela em branco).
+  const query = search.trim().toLowerCase()
+  const matches = useMemo(() => {
+    if (!query || !board) return null
+    const ids = new Set<string>()
+    for (const list of board.lists) {
+      for (const card of list.cards) {
+        if (
+          card.title.toLowerCase().includes(query) ||
+          card.description.toLowerCase().includes(query)
+        ) {
+          ids.add(card.id)
+        }
+      }
+    }
+    return ids
+  }, [query, board])
+
   // Qualquer janela aberta desliga os atalhos: senao "n" digitado num dialogo
   // criaria uma lista no board por tras dele.
   const modalOpen = minesweeperOpen || trashOpen || aboutOpen || helpOpen || confirmation !== null
@@ -132,25 +156,6 @@ export default function App() {
 
   const cardCount = board.lists.reduce((n, l) => n + l.cards.length, 0)
 
-  // Busca por titulo e descricao. Devolve o conjunto de ids que casam em vez de
-  // filtrar as listas: esconder os cards que nao casam quebraria o drag-and-drop
-  // (as posicoes dos vizinhos mudariam) -- realcar preserva o board inteiro.
-  const query = search.trim().toLowerCase()
-  const matches = useMemo(() => {
-    if (!query) return null
-    const ids = new Set<string>()
-    for (const list of board.lists) {
-      for (const card of list.cards) {
-        if (
-          card.title.toLowerCase().includes(query) ||
-          card.description.toLowerCase().includes(query)
-        ) {
-          ids.add(card.id)
-        }
-      }
-    }
-    return ids
-  }, [query, board.lists])
   // `board.trash` vem do GET /api/board e e atualizado pelo evento trash.updated:
   // o icone troca de estado sem precisar abrir a janela.
   const trashCount = (board.trash?.cards ?? 0) + (board.trash?.lists ?? 0)
