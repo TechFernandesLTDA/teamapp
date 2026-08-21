@@ -11,6 +11,8 @@ type Props = {
   draggingCardId: string | null
   draggingListId: string | null
   cardDropTarget: CardDropTarget | null
+  /** Ids que casam com a busca, ou null quando nao ha busca ativa. */
+  matches: Set<string> | null
   /** Slot (indice no array de listas) onde a lista arrastada vai cair. */
   listDropSlot: number | null
   isLast: boolean
@@ -34,7 +36,8 @@ function cardSlot(event: DragEvent, index: number): number {
 }
 
 export function ListColumn(props: Props) {
-  const { list, index, draggingCardId, draggingListId, cardDropTarget, listDropSlot } = props
+  const { list, index, draggingCardId, draggingListId, cardDropTarget, listDropSlot, matches } =
+    props
   const [renaming, setRenaming] = useState(false)
   const [draftTitle, setDraftTitle] = useState(list.title)
   const [newCard, setNewCard] = useState('')
@@ -161,7 +164,10 @@ export function ListColumn(props: Props) {
             className={
               'card' +
               (draggingCardId === card.id ? ' dragging' : '') +
-              (isCardTarget(i) ? ' drop-here' : '')
+              (isCardTarget(i) ? ' drop-here' : '') +
+              // Busca realca em vez de filtrar: esconder os que nao casam mudaria
+              // os vizinhos e quebraria o calculo de position no drop.
+              (matches === null ? '' : matches.has(card.id) ? ' card-match' : ' card-dimmed')
             }
             draggable
             onDragStart={(e) => {
