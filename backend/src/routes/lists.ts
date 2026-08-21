@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '../db.js'
 import { broadcast } from '../bus.js'
+import { record } from '../activity.js'
+import { serialize } from '../serialize.js'
 import { ALIVE, broadcastTrash, findLiveList } from '../trash.js'
 
 export async function listRoutes(app: FastifyInstance) {
@@ -13,23 +15,27 @@ export async function listRoutes(app: FastifyInstance) {
     const board = await prisma.board.findUnique({ where: { slug: 'default' } })
     if (!board) return reply.code(404).send({ error: 'board default nao existe' })
 
-    // Inclui as listas na lixeira: uma lista restaurada nao deve colidir de
-    // position com uma criada enquanto ela estava fora.
-    const last = await prisma.list.findFirst({
-      where: { boardId: board.id },
-      orderBy: { position: 'desc' },
-    })
+    // Mesmo race do POST /api/cards: ler-e-inserir tem que ser atomico.
+    const list = await serialize(`lists:${board.id}`, async () => {
+      // Inclui as listas na lixeira: uma lista restaurada nao deve colidir de
+      // position com uma criada enquanto ela estava fora.
+      const last = await prisma.list.findFirst({
+        where: { boardId: board.id },
+        orderBy: { position: 'desc' },
+      })
 
-    const list = await prisma.list.create({
-      data: {
-        title: title.trim(),
-        position: last ? last.position + 1 : 0,
-        boardId: board.id,
-      },
-      include: { cards: true },
+      return prisma.list.create({
+        data: {
+          title: title.trim(),
+          position: last ? last.position + 1 : 0,
+          boardId: board.id,
+        },
+        include: { cards: true },
+      })
     })
 
     broadcast('list.created', list)
+    await record('list.created', `Lista "${list.title}" criada`)
     return reply.code(201).send(list)
   })
 
@@ -64,6 +70,12 @@ export async function listRoutes(app: FastifyInstance) {
     })
 
     broadcast('list.updated', list)
+    await record(
+      'list.updated',
+      list.title !== exists.title
+        ? `Lista "${exists.title}" renomeada para "${list.title}"`
+        : `Lista "${list.title}" reordenada`,
+    )
     return list
   })
 
@@ -79,6 +91,7 @@ export async function listRoutes(app: FastifyInstance) {
     await prisma.list.update({ where: { id }, data: { deletedAt: new Date() } })
 
     broadcast('list.deleted', { id })
+    await record('list.deleted', `Lista "${exists.title}" foi para a lixeira`)
     await broadcastTrash()
     return reply.code(204).send()
   })

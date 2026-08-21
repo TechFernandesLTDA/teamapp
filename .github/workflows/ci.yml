@@ -105,6 +105,11 @@ jobs:
       - name: Smoke test do contrato
         run: node backend/scripts/smoke.mjs http://localhost:3001
 
+      # Concorrencia: 10 clientes WS, mutacoes em rajada. Pegou um race real de
+      # read-modify-write no POST que o smoke sequencial nunca acionaria.
+      - name: Teste de concorrencia do WebSocket
+        run: node backend/scripts/ws-stress.mjs http://localhost:3001
+
       - name: Frontend responde na 8090
         run: curl -fsS -o /dev/null http://localhost:8090
 

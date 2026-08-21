@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '../db.js'
 import { broadcast } from '../bus.js'
+import { record } from '../activity.js'
+import { serialize } from '../serialize.js'
 import { broadcastTrash, findLiveCard, findLiveList } from '../trash.js'
 
 export async function cardRoutes(app: FastifyInstance) {
@@ -24,23 +26,29 @@ export async function cardRoutes(app: FastifyInstance) {
     const list = await findLiveList(listId)
     if (!list) return reply.code(404).send({ error: 'lista nao encontrada' })
 
-    // De proposito conta os cards na lixeira tambem: se um card com position 7
-    // for restaurado depois, ele nao colide com um criado agora.
-    const last = await prisma.card.findFirst({
-      where: { listId },
-      orderBy: { position: 'desc' },
-    })
+    // Ler a ultima position e inserir precisa ser atomico: sem isso duas
+    // criacoes simultaneas leem a mesma "ultima" e nascem empatadas, e dois
+    // cards empatados tornam o drag entre eles inoperante (ver serialize.ts).
+    const card = await serialize(`cards:${listId}`, async () => {
+      // De proposito conta os cards na lixeira tambem: se um card com position 7
+      // for restaurado depois, ele nao colide com um criado agora.
+      const last = await prisma.card.findFirst({
+        where: { listId },
+        orderBy: { position: 'desc' },
+      })
 
-    const card = await prisma.card.create({
-      data: {
-        listId,
-        title: title.trim(),
-        description: description ?? '',
-        position: last ? last.position + 1 : 0,
-      },
+      return prisma.card.create({
+        data: {
+          listId,
+          title: title.trim(),
+          description: description ?? '',
+          position: last ? last.position + 1 : 0,
+        },
+      })
     })
 
     broadcast('card.created', card)
+    await record('card.created', `Card "${card.title}" criado em "${list.title}"`)
     return reply.code(201).send(card)
   })
 
@@ -74,6 +82,12 @@ export async function cardRoutes(app: FastifyInstance) {
     const card = await prisma.card.update({ where: { id }, data })
 
     broadcast('card.updated', card)
+    await record(
+      'card.updated',
+      card.title !== exists.title
+        ? `Card "${exists.title}" renomeado para "${card.title}"`
+        : `Card "${card.title}" editado`,
+    )
     return card
   })
 
@@ -102,6 +116,7 @@ export async function cardRoutes(app: FastifyInstance) {
     })
 
     broadcast('card.moved', { id: card.id, listId: card.listId, position: card.position })
+    await record('card.moved', `Card "${card.title}" movido para "${list.title}"`)
     return card
   })
 
@@ -117,6 +132,7 @@ export async function cardRoutes(app: FastifyInstance) {
     await prisma.card.update({ where: { id }, data: { deletedAt: new Date() } })
 
     broadcast('card.deleted', { id })
+    await record('card.deleted', `Card "${exists.title}" foi para a lixeira`)
     await broadcastTrash()
     return reply.code(204).send()
   })
