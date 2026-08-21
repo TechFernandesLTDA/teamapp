@@ -1,4 +1,5 @@
 import { Modal } from './Modal'
+import { WarningIcon } from './icons'
 
 export type Confirmation = { title: string; message: string; onYes: () => void }
 
@@ -13,8 +14,8 @@ export function ConfirmDialog({
   return (
     <Modal title={confirmation.title} onClose={onClose} width={320}>
       <div className="confirm-body">
-        <span className="confirm-icon" aria-hidden="true">
-          !
+        <span className="confirm-icon">
+          <WarningIcon size={32} />
         </span>
         <p>{confirmation.message}</p>
       </div>
