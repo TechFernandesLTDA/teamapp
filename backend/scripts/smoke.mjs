@@ -139,6 +139,8 @@ async function main() {
     ['DELETE', `/api/cards/${cardId}`],
     ['DELETE', `/api/lists/${listId}`],
     ['POST', '/api/cards'],
+    ['DELETE', '/api/trash'],
+    ['POST', `/api/trash/cards/${cardId}/restore`],
   ]) {
     const { origin, methods } = await preflight(method, path)
     check(
@@ -188,6 +190,155 @@ async function main() {
   // A lista deletada nao pode reaparecer no board.
   const after = await api('GET', '/api/board')
   check('lista deletada sumiu do board', !after.body.lists.some((l) => l.id === listId))
+
+  // --- Lixeira ---
+  // Depois dos DELETEs acima, `cardId` e `listId` estao na lixeira, nao apagados.
+  // Estas assercoes existem porque soft delete muda o significado de todo
+  // findUnique por id: sem filtro de deletedAt da para renomear, mover e criar
+  // dentro de coisas que o board nao mostra mais.
+  const trash = await api('GET', '/api/trash')
+  check('GET /api/trash -> 200', trash.status === 200)
+  const trashedCard = trash.body?.cards?.find((c) => c.id === cardId)
+  const trashedList = trash.body?.lists?.find((l) => l.id === listId)
+  check('card deletado aparece na lixeira', Boolean(trashedCard))
+  check('lista deletada aparece na lixeira', Boolean(trashedList))
+  check('card na lixeira traz originalList', Boolean(trashedCard?.originalList?.title))
+  check(
+    'originalList.deleted e false quando a lista de origem esta viva',
+    trashedCard?.originalList?.deleted === false,
+  )
+  check('lista na lixeira traz cardCount', typeof trashedList?.cardCount === 'number')
+  check('WS recebeu trash.updated', events.some((e) => e.type === 'trash.updated'))
+  const trashEvent = events.filter((e) => e.type === 'trash.updated').pop()
+  check(
+    'payload de trash.updated e so a contagem { cards, lists }',
+    trashEvent && Object.keys(trashEvent.payload).sort().join(',') === 'cards,lists',
+    trashEvent ? JSON.stringify(trashEvent.payload) : 'evento ausente',
+  )
+  const boardWithTrash = await api('GET', '/api/board')
+  check('GET /api/board traz a contagem da lixeira', typeof boardWithTrash.body?.trash?.cards === 'number')
+  check(
+    'card na lixeira nao aparece no board',
+    !boardWithTrash.body.lists.flatMap((l) => l.cards).some((c) => c.id === cardId),
+  )
+
+  // Nada que opera sobre recurso vivo pode enxergar item na lixeira.
+  const patchTrashed = await api('PATCH', `/api/cards/${cardId}`, { title: 'zumbi' })
+  check('PATCH em card na lixeira -> 404', patchTrashed.status === 404, `status ${patchTrashed.status}`)
+  const moveTrashed = await api('PATCH', `/api/cards/${cardId}/move`, { listId: targetList.id, position: 0 })
+  check('move de card na lixeira -> 404', moveTrashed.status === 404, `status ${moveTrashed.status}`)
+  const renameTrashedList = await api('PATCH', `/api/lists/${listId}`, { title: 'zumbi' })
+  check('PATCH em lista na lixeira -> 404', renameTrashedList.status === 404, `status ${renameTrashedList.status}`)
+  const cardIntoTrashedList = await api('POST', '/api/cards', { listId, title: 'zumbi' })
+  check('POST /api/cards em lista na lixeira -> 404', cardIntoTrashedList.status === 404, `status ${cardIntoTrashedList.status}`)
+  const someLiveCardId = boardWithTrash.body.lists.flatMap((l) => l.cards)[0]?.id ?? 'x'
+  const moveIntoTrashedList = await api('PATCH', `/api/cards/${someLiveCardId}/move`, { listId, position: 0 })
+  check('move para lista na lixeira -> 404', moveIntoTrashedList.status === 404, `status ${moveIntoTrashedList.status}`)
+
+  // Restaurar devolve o item ao lugar de origem e ele reaparece no board.
+  const restored = await api('POST', `/api/trash/cards/${cardId}/restore`)
+  check('POST /api/trash/cards/:id/restore -> 200', restored.status === 200, `status ${restored.status}`)
+  check('card restaurado sai da lixeira', restored.body?.deletedAt === null)
+  await waitFor(250)
+  const boardAfterRestore = await api('GET', '/api/board')
+  check(
+    'card restaurado volta ao board',
+    boardAfterRestore.body.lists.flatMap((l) => l.cards).some((c) => c.id === cardId),
+  )
+  check(
+    'restaurar reusa card.created (o cliente ja faz upsert por id)',
+    events.filter((e) => e.type === 'card.created').some((e) => e.payload?.id === cardId),
+  )
+  const doubleRestore = await api('POST', `/api/trash/cards/${cardId}/restore`)
+  check('restaurar card que ja voltou -> 404', doubleRestore.status === 404)
+
+  const restoredList = await api('POST', `/api/trash/lists/${listId}/restore`)
+  check('POST /api/trash/lists/:id/restore -> 200', restoredList.status === 200, `status ${restoredList.status}`)
+  check(
+    'lista restaurada vem com cards[] (senao o cliente sobrescreve com vazio)',
+    Array.isArray(restoredList.body?.cards),
+  )
+  const boardAfterListRestore = await api('GET', '/api/board')
+  check('lista restaurada volta ao board', boardAfterListRestore.body.lists.some((l) => l.id === listId))
+
+  // Card na lixeira cuja lista tambem foi para a lixeira: 409 explicito, nao 500
+  // nem restauracao dentro de uma lista que o board nao mostra.
+  const orphan = await api('POST', '/api/cards', { listId, title: 'Orfao' })
+  const orphanId = orphan.body?.id
+  await api('DELETE', `/api/cards/${orphanId}`)
+  await api('DELETE', `/api/lists/${listId}`)
+  const orphanRestore = await api('POST', `/api/trash/cards/${orphanId}/restore`)
+  check('restaurar card cuja lista esta na lixeira -> 409', orphanRestore.status === 409, `status ${orphanRestore.status}`)
+  const trashWithOrphan = await api('GET', '/api/trash')
+  check(
+    'originalList.deleted avisa que o restore vai falhar',
+    trashWithOrphan.body.cards.find((c) => c.id === orphanId)?.originalList?.deleted === true,
+  )
+  const listBack = await api('POST', `/api/trash/lists/${listId}/restore`)
+  check('restaurar a lista destrava o card', listBack.status === 200)
+  check(
+    'card jogado fora sozinho NAO ressuscita junto com a lista',
+    !listBack.body.cards.some((c) => c.id === orphanId),
+  )
+  const trashAfterListBack = await api('GET', '/api/trash')
+  check('...e continua na lixeira', trashAfterListBack.body.cards.some((c) => c.id === orphanId))
+  const orphanRestore2 = await api('POST', `/api/trash/cards/${orphanId}/restore`)
+  check('com a lista de volta, o card restaura', orphanRestore2.status === 200, `status ${orphanRestore2.status}`)
+
+  // Apagar de vez, item a item.
+  await api('DELETE', `/api/cards/${orphanId}`)
+  const purge = await api('DELETE', `/api/trash/cards/${orphanId}`)
+  check('DELETE /api/trash/cards/:id -> 204', purge.status === 204)
+  const trashAfterPurge = await api('GET', '/api/trash')
+  check('apagado de vez some da lixeira', !trashAfterPurge.body.cards.some((c) => c.id === orphanId))
+  const purgeLive = await api('DELETE', `/api/trash/cards/${cardId}`)
+  check('apagar de vez um card vivo -> 404', purgeLive.status === 404)
+
+  // Esvaziar Lixeira. Destrutivo de verdade: guarda o card de demonstracao do
+  // seed antes e recria pela API depois, senao rodar o smoke apaga a piada.
+  const trashBeforeEmpty = await api('GET', '/api/trash')
+  const demo = trashBeforeEmpty.body.cards.find((c) => c.title === 'Trabalho de Estagio.doc')
+  await api('DELETE', `/api/cards/${cardId}`)
+  await api('DELETE', `/api/lists/${listId}`)
+  // Um card VIVO dentro de uma lista na lixeira morre no cascade do esvaziar.
+  // A contagem retornada tem que inclui-lo: contar so `deletedAt != null`
+  // reportava menos linhas do que a operacao realmente apagava.
+  const doomedList = await api('POST', '/api/lists', { title: 'Lista com card vivo' })
+  const liveInside = await api('POST', '/api/cards', {
+    listId: doomedList.body.id,
+    title: 'Vivo, mas condenado',
+  })
+  await api('DELETE', `/api/lists/${doomedList.body.id}`)
+  const countsBefore = (await api('GET', '/api/trash')).body.counts
+
+  const emptied = await api('DELETE', '/api/trash')
+  check(
+    'DELETE /api/trash -> 200 com { deleted }',
+    emptied.status === 200 && typeof emptied.body?.deleted?.cards === 'number',
+    `status ${emptied.status}`,
+  )
+  check(
+    'esvaziar conta o card vivo que o cascade leva junto',
+    emptied.body?.deleted?.cards > countsBefore.cards,
+    `reportou ${emptied.body?.deleted?.cards}, lixeira tinha ${countsBefore.cards} + 1 vivo dentro da lista`,
+  )
+  const gone = await api('PATCH', `/api/cards/${liveInside.body.id}`, { title: 'x' })
+  check('...e ele realmente sumiu', gone.status === 404, `status ${gone.status}`)
+
+  const afterEmpty = await api('GET', '/api/trash')
+  check('lixeira fica vazia', afterEmpty.body.cards.length === 0 && afterEmpty.body.lists.length === 0)
+  const boardAfterEmpty = await api('GET', '/api/board')
+  check('esvaziar a lixeira nao toca no board', boardAfterEmpty.body.lists.length > 0)
+  check('lista apagada de vez nao volta', !boardAfterEmpty.body.lists.some((l) => l.id === listId))
+
+  if (demo && !demo.originalList.deleted) {
+    const remade = await api('POST', '/api/cards', {
+      listId: demo.originalList.id,
+      title: demo.title,
+      description: demo.description,
+    })
+    if (remade.status === 201) await api('DELETE', `/api/cards/${remade.body.id}`)
+  }
 
   ws.close()
   console.log(failures === 0 ? '\nSMOKE OK' : `\nSMOKE FALHOU: ${failures} assercao(oes)`)

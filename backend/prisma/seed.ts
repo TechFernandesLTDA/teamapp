@@ -31,6 +31,21 @@ async function main() {
     })
   }
 
+  // Um item ja na lixeira: deixa a feature demonstravel num stack novo e serve
+  // de conferencia de que o GET /api/board realmente esconde o que foi jogado fora.
+  const inbox = await prisma.list.findFirst({ where: { boardId: board.id }, orderBy: { position: 'asc' } })
+  if (inbox) {
+    await prisma.card.create({
+      data: {
+        listId: inbox.id,
+        title: 'Trabalho de Estagio.doc',
+        description: 'Apagado por engano em 1997.',
+        position: 99,
+        deletedAt: new Date(),
+      },
+    })
+  }
+
   console.log('seed ok')
 }
 

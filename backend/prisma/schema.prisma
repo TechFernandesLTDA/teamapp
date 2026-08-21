@@ -15,23 +15,32 @@ model Board {
 }
 
 model Card {
-  id          String @id @default(cuid())
+  id          String    @id @default(cuid())
   title       String
-  description String @default("")
+  description String    @default("")
   position    Float
   listId      String
-  list        List   @relation(fields: [listId], references: [id], onDelete: Cascade)
+  list        List      @relation(fields: [listId], references: [id], onDelete: Cascade)
+  // Lixeira: null = no board, timestamp = na lixeira. DELETE /api/cards/:id
+  // marca; DELETE /api/trash/... e que apaga de verdade.
+  deletedAt   DateTime?
 
   @@index([listId, position])
+  @@index([deletedAt])
 }
 
 model List {
-  id       String @id @default(cuid())
+  id       String    @id @default(cuid())
   title    String
   position Float
   boardId  String
-  board    Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  board    Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
   cards    Card[]
+  // Lixeira. Mandar uma lista para a lixeira NAO marca os cards dela: eles somem
+  // do board porque a lista sumiu, e voltam junto quando ela e restaurada. Marcar
+  // em cascata ressuscitaria cards que ja tinham sido jogados fora sozinhos.
+  deletedAt DateTime?
 
   @@index([boardId, position])
+  @@index([deletedAt])
 }

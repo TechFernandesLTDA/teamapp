@@ -8,6 +8,9 @@ export type EventType =
   | 'card.updated'
   | 'card.moved'
   | 'card.deleted'
+  // Lixeira: o payload e so a contagem ({ cards, lists }), para o icone do desktop
+  // saber se ela esta cheia. O conteudo vem de GET /api/trash quando a janela abre.
+  | 'trash.updated'
 
 const clients = new Set<WebSocket>()
 

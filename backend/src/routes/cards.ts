@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '../db.js'
 import { broadcast } from '../bus.js'
+import { broadcastTrash, findLiveCard, findLiveList } from '../trash.js'
 
 export async function cardRoutes(app: FastifyInstance) {
   app.post('/api/cards', async (req, reply) => {
@@ -20,9 +21,11 @@ export async function cardRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'description deve ser uma string' })
     }
 
-    const list = await prisma.list.findUnique({ where: { id: listId } })
+    const list = await findLiveList(listId)
     if (!list) return reply.code(404).send({ error: 'lista nao encontrada' })
 
+    // De proposito conta os cards na lixeira tambem: se um card com position 7
+    // for restaurado depois, ele nao colide com um criado agora.
     const last = await prisma.card.findFirst({
       where: { listId },
       orderBy: { position: 'desc' },
@@ -65,7 +68,7 @@ export async function cardRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'nada para atualizar' })
     }
 
-    const exists = await prisma.card.findUnique({ where: { id } })
+    const exists = await findLiveCard(id)
     if (!exists) return reply.code(404).send({ error: 'card nao encontrado' })
 
     const card = await prisma.card.update({ where: { id }, data })
@@ -87,10 +90,10 @@ export async function cardRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'position deve ser um numero finito' })
     }
 
-    const exists = await prisma.card.findUnique({ where: { id } })
+    const exists = await findLiveCard(id)
     if (!exists) return reply.code(404).send({ error: 'card nao encontrado' })
 
-    const list = await prisma.list.findUnique({ where: { id: listId } })
+    const list = await findLiveList(listId)
     if (!list) return reply.code(404).send({ error: 'lista de destino nao encontrada' })
 
     const card = await prisma.card.update({
@@ -105,12 +108,16 @@ export async function cardRoutes(app: FastifyInstance) {
   app.delete('/api/cards/:id', async (req, reply) => {
     const { id } = req.params as { id: string }
 
-    const exists = await prisma.card.findUnique({ where: { id } })
+    const exists = await findLiveCard(id)
     if (!exists) return reply.code(404).send({ error: 'card nao encontrado' })
 
-    await prisma.card.delete({ where: { id } })
+    // Soft delete: o card vai para a lixeira em vez de sumir. Para o board o
+    // evento e o mesmo de sempre -- 'card.deleted' com { id } -- entao o cliente
+    // continua removendo por id sem saber que a linha ainda existe.
+    await prisma.card.update({ where: { id }, data: { deletedAt: new Date() } })
 
     broadcast('card.deleted', { id })
+    await broadcastTrash()
     return reply.code(204).send()
   })
 }

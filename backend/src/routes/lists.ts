@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '../db.js'
 import { broadcast } from '../bus.js'
+import { ALIVE, broadcastTrash, findLiveList } from '../trash.js'
 
 export async function listRoutes(app: FastifyInstance) {
   app.post('/api/lists', async (req, reply) => {
@@ -12,6 +13,8 @@ export async function listRoutes(app: FastifyInstance) {
     const board = await prisma.board.findUnique({ where: { slug: 'default' } })
     if (!board) return reply.code(404).send({ error: 'board default nao existe' })
 
+    // Inclui as listas na lixeira: uma lista restaurada nao deve colidir de
+    // position com uma criada enquanto ela estava fora.
     const last = await prisma.list.findFirst({
       where: { boardId: board.id },
       orderBy: { position: 'desc' },
@@ -51,13 +54,13 @@ export async function listRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'nada para atualizar' })
     }
 
-    const exists = await prisma.list.findUnique({ where: { id } })
+    const exists = await findLiveList(id)
     if (!exists) return reply.code(404).send({ error: 'lista nao encontrada' })
 
     const list = await prisma.list.update({
       where: { id },
       data,
-      include: { cards: { orderBy: [{ position: 'asc' }, { id: 'asc' }] } },
+      include: { cards: { where: ALIVE, orderBy: [{ position: 'asc' }, { id: 'asc' }] } },
     })
 
     broadcast('list.updated', list)
@@ -67,12 +70,16 @@ export async function listRoutes(app: FastifyInstance) {
   app.delete('/api/lists/:id', async (req, reply) => {
     const { id } = req.params as { id: string }
 
-    const exists = await prisma.list.findUnique({ where: { id } })
+    const exists = await findLiveList(id)
     if (!exists) return reply.code(404).send({ error: 'lista nao encontrada' })
 
-    await prisma.list.delete({ where: { id } })
+    // Soft delete. Os cards da lista NAO sao marcados: eles somem do board junto
+    // com ela e voltam junto na restauracao. Marcar em cascata faria um card que
+    // ja tinha ido para a lixeira sozinho ressuscitar quando a lista voltasse.
+    await prisma.list.update({ where: { id }, data: { deletedAt: new Date() } })
 
     broadcast('list.deleted', { id })
+    await broadcastTrash()
     return reply.code(204).send()
   })
 }
