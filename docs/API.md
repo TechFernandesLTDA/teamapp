@@ -20,7 +20,11 @@ type Card  = { id: string; listId: string; title: string; description: string; p
 ### `GET /api/board`
 Retorna o board `default` com `lists` ordenadas por `position` asc e, dentro de cada uma, `cards` ordenados por `position` asc. É a única chamada de leitura que o frontend precisa fazer.
 
-`200 Board`
+Itens na lixeira **não aparecem aqui** — nem listas, nem cards. A resposta traz também
+`trash: { cards, lists }`, a contagem do que está na lixeira, para o ícone do desktop
+nascer no estado certo sem um `GET /api/trash` extra.
+
+`200 Board & { trash: { cards, lists } }`
 
 ### `POST /api/lists`
 `{ title: string }` — `position` é calculada pelo servidor (última + 1).
@@ -31,8 +35,16 @@ Retorna o board `default` com `lists` ordenadas por `position` asc e, dentro de 
 `200 List` · evento `list.updated`
 
 ### `DELETE /api/lists/:id`
-Apaga a lista e seus cards em cascata.
-`204` · evento `list.deleted` com payload `{ id }`
+**Manda a lista para a lixeira** (soft delete) — não apaga. Ela some do `GET /api/board`
+junto com todos os seus cards e passa a aparecer em `GET /api/trash`.
+
+Os cards da lista **não** são marcados individualmente: eles somem porque a lista sumiu e
+voltam junto na restauração. Um card que já tinha ido para a lixeira sozinho continua lá
+mesmo depois de a lista voltar.
+
+`204` · eventos `list.deleted` com payload `{ id }` **e** `trash.updated`
+
+Do ponto de vista do board o evento é o mesmo de antes: remova a lista por `id`.
 
 ### `POST /api/cards`
 `{ listId: string, title: string, description?: string }` — `position` é calculada pelo servidor (última da lista + 1).
@@ -47,13 +59,73 @@ Apaga a lista e seus cards em cascata.
 `200 Card` · evento `card.moved` com payload `{ id, listId, position }`
 
 ### `DELETE /api/cards/:id`
-`204` · evento `card.deleted` com payload `{ id }`
+**Manda o card para a lixeira** (soft delete) — não apaga.
+
+`204` · eventos `card.deleted` com payload `{ id }` **e** `trash.updated`
+
+### A Lixeira
+
+Soft delete muda o significado de "existe": a linha continua no banco, mas invisível para
+o board. **Toda rota que opera sobre um recurso vivo filtra `deletedAt: null`** — renomear,
+mover, ou criar um card dentro de uma lista que está na lixeira retorna `404`, como se o
+recurso não existisse. É o comportamento que você quer no cliente: um item na lixeira não
+é um item editável.
+
+#### `GET /api/trash`
+```json
+{
+  "cards": [{ "id": "...", "title": "...", "description": "...", "position": 3,
+              "listId": "...", "deletedAt": "2026-08-21T04:12:00.000Z",
+              "originalList": { "id": "...", "title": "A Fazer", "deleted": false } }],
+  "lists": [{ "id": "...", "title": "...", "position": 1, "boardId": "...",
+              "deletedAt": "...", "cardCount": 4 }],
+  "counts": { "cards": 1, "lists": 0 }
+}
+```
+Mais recente primeiro. `originalList.deleted` diz que a lista de origem também está na
+lixeira — nesse caso o restore do card retorna `409`, então dá para esmaecer o botão
+"Restaurar" antes do clique em vez de mostrar um erro. `cardCount` é quantos cards voltam
+junto se a lista for restaurada.
+
+`200`
+
+#### `POST /api/trash/cards/:id/restore`
+Devolve o card à posição original. `200 Card` · eventos **`card.created`** e `trash.updated`.
+
+O evento é `card.created`, não um tipo novo: o cliente já aplica esse evento como upsert
+por `id`, então restaurar aparece no board sem nenhuma mudança no reducer.
+
+`404` se o card não está na lixeira · `409` se a lista de origem está na lixeira
+(restaure a lista primeiro).
+
+#### `POST /api/trash/lists/:id/restore`
+`200 List` **com `cards[]` populado** (só os cards vivos) · eventos **`list.created`** e
+`trash.updated`. Os cards vêm junto de propósito — uma lista sem eles faria o cliente
+fazer upsert de uma lista vazia por cima da que tem conteúdo.
+
+`404` se a lista não está na lixeira.
+
+#### `DELETE /api/trash/cards/:id` · `DELETE /api/trash/lists/:id`
+Apaga **de verdade**, irreversível. `204` · evento `trash.updated`.
+
+Não emite `card.deleted`/`list.deleted`: para o board o item já tinha sumido no soft delete.
+Apagar uma lista de vez leva os cards dela em cascata, inclusive os que estavam na lixeira
+por conta própria. `404` se o item não está na lixeira (apagar um item **vivo** por aqui
+não funciona — use `DELETE /api/cards/:id`).
+
+#### `DELETE /api/trash`
+Esvaziar Lixeira. Apaga tudo de vez. `200 { deleted: { cards, lists } }` · evento `trash.updated`.
 
 ## WebSocket
 
 `ws://localhost:3001/ws`. Sem handshake, sem subscribe: ao conectar você recebe todo evento subsequente.
 
 Toda mensagem é `{ type, payload }`. O broadcast vai para **todos** os clientes, incluindo o que originou a mutação — aplique os eventos como upsert idempotente por `id`.
+
+`trash.updated` é o único evento que não fala de um recurso específico: o payload é só a
+contagem, para o ícone do desktop saber se a lixeira está cheia. O conteúdo vem de
+`GET /api/trash` quando a janela abre — mandar a lixeira inteira em cada delete violaria
+a regra de que o payload nunca é o estado todo.
 
 | `type` | `payload` |
 |---|---|
@@ -64,6 +136,7 @@ Toda mensagem é `{ type, payload }`. O broadcast vai para **todos** os clientes
 | `card.updated` | `Card` |
 | `card.moved` | `{ id, listId, position }` |
 | `card.deleted` | `{ id }` |
+| `trash.updated` | `{ cards, lists }` — só a contagem |
 
 Se a conexão cair, o cliente deve reconectar com backoff e refazer `GET /api/board` ao reconectar — eventos perdidos durante a queda não são reenviados.
 

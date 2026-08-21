@@ -76,7 +76,27 @@ A consequência é que o cliente precisa aplicar todo evento como um **upsert id
 
 Formato: `{ "type": "card.moved", "payload": { ... } }`. O payload de movimento é só `{ id, listId, position }`, nunca o board inteiro.
 
-Eventos: `list.created`, `list.updated`, `list.deleted`, `card.created`, `card.updated`, `card.moved`, `card.deleted`.
+Eventos: `list.created`, `list.updated`, `list.deleted`, `card.created`, `card.updated`, `card.moved`, `card.deleted`, `trash.updated`.
+
+### A Lixeira: DELETE é soft delete
+
+`DELETE /api/cards/:id` e `DELETE /api/lists/:id` **não apagam** — marcam `deletedAt` e o
+item vai para a lixeira, de onde pode voltar. Só as rotas `/api/trash` apagam de verdade.
+
+A consequência que pega desprevenido: `findUnique({ where: { id } })` continua achando a
+linha. **Toda rota que opera sobre um recurso vivo precisa filtrar `deletedAt: null`** —
+use `findLiveCard()`/`findLiveList()` de `backend/src/trash.ts` em vez de escrever o where
+na mão. Sem isso dá para renomear, mover e criar cards dentro de coisas que o board não
+mostra mais.
+
+Mandar uma lista para a lixeira **não** marca os cards dela: eles somem porque a lista
+sumiu, e voltam junto na restauração. Marcar em cascata ressuscitaria cards que já tinham
+sido jogados fora sozinhos.
+
+Restaurar reusa `card.created`/`list.created` em vez de inventar `*.restored`: o cliente
+já aplica esses eventos como upsert por `id`, então o item reaparece sem mudança no
+reducer. `trash.updated` carrega **só a contagem** `{ cards, lists }` — o conteúdo vem de
+`GET /api/trash` quando a janela abre.
 
 ### API REST
 
@@ -87,11 +107,18 @@ GET    /api/health
 GET    /api/board                     board default com lists e cards aninhados, já ordenados
 POST   /api/lists                     { title }
 PATCH  /api/lists/:id                 { title?, position? }
-DELETE /api/lists/:id                 cascateia nos cards
+DELETE /api/lists/:id                 -> lixeira, leva os cards junto
 POST   /api/cards                     { listId, title, description? }
 PATCH  /api/cards/:id                 { title?, description? }
 PATCH  /api/cards/:id/move            { listId, position }   <- o drag-and-drop
-DELETE /api/cards/:id
+DELETE /api/cards/:id                 -> lixeira, nao apaga
+
+GET    /api/trash                     { cards, lists, counts }
+POST   /api/trash/cards/:id/restore   409 se a lista de origem esta na lixeira
+POST   /api/trash/lists/:id/restore
+DELETE /api/trash/cards/:id           apaga de vez
+DELETE /api/trash/lists/:id           apaga de vez
+DELETE /api/trash                     esvaziar lixeira
 ```
 
 `GET /api/board` é a única leitura de que o frontend precisa; depois dela o estado se mantém pelo WebSocket. Não crie endpoints `GET` por recurso individual sem necessidade real.
@@ -101,3 +128,23 @@ DELETE /api/cards/:id
 O frontend usa o pacote npm **`98.css`** (não CDN — o container precisa buildar offline). Cada lista é uma `.window` com `.title-bar`, cada card é um item dentro de `.window-body`. Não escreva CSS que recrie bordas ou botões que o `98.css` já fornece; use as classes dele e limite o CSS próprio a layout (o board é um flex row com scroll horizontal).
 
 Drag-and-drop é HTML5 nativo (`draggable`, `dragover`, `drop`) — sem biblioteca.
+
+### Ícones
+
+`frontend/src/icons.tsx` tem os ícones em SVG pixel art, desenhados numa grade de
+16x16 com a paleta VGA de 16 cores. **São recriações próprias, não os arquivos da
+Microsoft** — os ícones originais do Windows 95 são proprietários e este repositório
+é público.
+
+Três regras mantêm a aparência: `shapeRendering="crispEdges"` (sem isso o navegador
+aplica antialias e o resultado parece um ícone moderno borrado), escalar só em
+múltiplos inteiros do tamanho base (16, 32, 48 — um ícone de 16px renderizado em
+20px mostra linhas de espessura irregular), e nada de emoji na UI: é o detalhe que
+denuncia a imitação mais rápido que qualquer outro.
+
+### Busca: realce, não filtro
+
+A busca marca os cards que casam e esmaece o resto, em vez de esconder os que não
+casam. Filtrar mudaria os vizinhos de cada card, e como `positionFor()` calcula a
+posição nova a partir dos vizinhos do destino, arrastar durante uma busca gravaria
+a posição errada.

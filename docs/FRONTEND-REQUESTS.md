@@ -106,3 +106,76 @@ Nenhum é bloqueante, todos vêm de leitura de código:
 - [ ] **`card.moved` de card desconhecido é descartado em silêncio**, sem recuperação até reload. Idem `card.created` cujo `listId` não está no board. Um `void load()` nesses casos resolveria.
 
 Detalhes completos, incluindo os buracos de contrato que fechei, no fim de `docs/API.md`.
+
+---
+
+## Nova feature no backend: a Lixeira (backend, 2026-08-21)
+
+Implementei **soft delete com restauração** — a Lixeira do Windows 95. Contrato completo em
+`docs/API.md` (seção "A Lixeira"); resumo do que muda para você:
+
+### O que muda no que você já tem: nada quebra
+
+`DELETE /api/cards/:id` e `DELETE /api/lists/:id` continuam retornando `204` e continuam
+emitindo `card.deleted`/`list.deleted` com `{ id }`. O item só não é mais apagado — vai
+para a lixeira. **Seu reducer não precisa de nenhuma mudança para continuar funcionando.**
+
+Restaurar também reusa `card.created`/`list.created` de propósito, em vez de eventos novos:
+seu upsert idempotente por `id` já faz a coisa certa com eles. Um item restaurado reaparece
+no board sem você escrever uma linha.
+
+O único evento novo é `trash.updated`, com payload `{ cards, lists }` — **só a contagem**,
+para o ícone saber se a lixeira está cheia. Um `type` desconhecido no seu switch deve cair
+no default e ser ignorado; se ele estiver logando erro, vale silenciar.
+
+`GET /api/board` agora traz um campo a mais: `trash: { cards, lists }`. Assim o ícone
+nasce no estado certo sem um GET extra.
+
+### Endpoints novos
+
+```
+GET    /api/trash                     { cards, lists, counts }
+POST   /api/trash/cards/:id/restore   -> 200 Card, evento card.created
+POST   /api/trash/lists/:id/restore   -> 200 List (com cards[]), evento list.created
+DELETE /api/trash/cards/:id           apaga de vez, 204
+DELETE /api/trash/lists/:id           apaga de vez, 204
+DELETE /api/trash                     esvaziar, 200 { deleted: { cards, lists } }
+```
+
+Preflight de CORS testado para todos (o P0 de `methods` não se repete).
+
+### Pedidos
+
+- [ ] **Ícone da Lixeira no desktop.** Você tinha deixado "Ícone de Meu Computador" de fora
+      por achar que polui um board que ocupa a tela toda — concordo, e por isso este é
+      diferente: ele tem função. Duplo-clique abre a janela; e ele **muda de estado** —
+      vazia vs. cheia — conforme `trash.updated` e o `board.trash` inicial.
+- [ ] **Janela da Lixeira** (`.window` com `.title-bar`): lista o que `GET /api/trash`
+      devolve, cards e listas juntos, mais recente primeiro. Por item, botões
+      **Restaurar** e **Excluir** (esse é o irreversível). Rodapé com "Esvaziar Lixeira"
+      atrás do seu `ConfirmDialog` — é a única ação destrutiva de verdade aqui.
+- [ ] **Esmaeça "Restaurar" quando `originalList.deleted === true`.** Esse é o único ponto
+      onde o backend te dá informação para evitar um erro em vez de mostrar um: o restore
+      desse card retorna `409` porque a lista de origem também está na lixeira. O campo
+      existe para isso; a mensagem do `409` também é exibível se você preferir deixar
+      clicar.
+- [ ] **Menu Iniciar → "Lixeira".** Mesma janela, para quem não achar o ícone.
+
+### Duas coisas que valem saber antes de implementar
+
+1. **Restaurar uma lista traz junto só os cards que estavam vivos quando ela foi apagada.**
+   Um card que você jogou fora *individualmente* antes de apagar a lista **continua na
+   lixeira** depois que a lista volta — não ressuscita junto. É intencional (o oposto
+   desfaria uma ação que o usuário tomou de propósito), mas é o comportamento que mais
+   surpreende na hora de testar. `cardCount` na lista diz quantos vão voltar.
+2. **Item na lixeira não é editável.** Renomear, mover ou criar card dentro de uma lista
+   que está na lixeira retorna `404`, como se não existisse. Se sua UI tem algum caminho
+   que segura um `id` antigo (um dialog aberto quando o card foi apagado em outra aba),
+   ele vai receber `404` — o mesmo que já acontecia antes com delete real.
+
+O seed agora nasce com um card já na lixeira ("Trabalho de Estagio.doc") para você ter o
+que ver sem precisar apagar nada primeiro. `docker compose down -v && docker compose up
+--build` para pegar a migration.
+
+`backend/scripts/smoke.mjs` está em **80/80** contra o stack Docker, com 35 asserções novas
+só de lixeira (incluindo os dois casos acima). Roda de novo depois de mexer na API.
