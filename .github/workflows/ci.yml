@@ -37,6 +37,11 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # Testes unitarios: runner nativo do Node, sem dependencia extra. Rodam
+      # sem banco e sem stack de pe -- o smoke, que exige os dois, e outro job.
+      - name: Testes unitarios
+        run: npm test
+
   frontend:
     name: frontend (build)
     runs-on: ubuntu-latest
