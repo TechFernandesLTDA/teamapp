@@ -1,0 +1,23 @@
+# EditorConfig -- https://editorconfig.org
+# LF em tudo, sempre. Este repo ja teve um arquivo salvo em UTF-16 com CRLF que
+# quebrou o build de forma nao obvia; charset e end_of_line aqui nao sao estilo,
+# sao protecao.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.md]
+# Markdown usa dois espacos no fim da linha como quebra de linha.
+trim_trailing_whitespace = false
+
+[*.{yml,yaml,json,jsonc}]
+indent_size = 2
+
+[Makefile]
+indent_style = tab

@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (typecheck)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # Sem prisma generate o Prisma Client nao existe e o tsc quebra em
+      # arquivos que nao tem relacao com o schema.
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+  frontend:
+    name: frontend (build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # "npm run build" e "tsc -b && vite build": typecheck e bundle juntos.
+      - name: Build
+        run: npm run build
+
+  smoke:
+    name: smoke (stack completo)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      # smoke.mjs importa "ws"; ele vem das dependencias do backend.
+      - name: Install backend deps
+        run: npm ci
+        working-directory: backend
+
+      - name: Sobe o stack
+        run: docker compose up -d --build
+
+      - name: Espera o healthcheck do backend
+        run: |
+          for i in $(seq 1 60); do
+            status=$(docker compose ps --format '{{.Health}}' backend | head -n 1)
+            echo "tentativa $i: health=${status:-<vazio>}"
+            if [ "$status" = "healthy" ]; then
+              echo "backend saudavel"
+              exit 0
+            fi
+            if [ "$status" = "unhealthy" ]; then
+              echo "backend unhealthy"
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "timeout esperando o healthcheck do backend"
+          exit 1
+
+      - name: Smoke test do contrato
+        run: node backend/scripts/smoke.mjs http://localhost:3001
+
+      - name: Frontend responde na 8090
+        run: curl -fsS -o /dev/null http://localhost:8090
+
+      - name: Logs do backend (em caso de falha)
+        if: failure()
+        run: docker compose logs backend
+
+      - name: Derruba o stack
+        if: always()
+        run: docker compose down -v
