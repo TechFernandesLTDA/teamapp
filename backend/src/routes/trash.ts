@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '../db.js'
 import { broadcast } from '../bus.js'
+import { record } from '../activity.js'
 import { ALIVE, broadcastTrash, trashCounts } from '../trash.js'
 
 const CARD_ORDER = [{ position: 'asc' as const }, { id: 'asc' as const }]
@@ -69,6 +70,7 @@ export async function trashRoutes(app: FastifyInstance) {
     // `card.created`, nao um `card.restored` novo: o cliente ja faz upsert por id
     // com esse evento, entao restaurar aparece no board sem mudanca no frontend.
     broadcast('card.created', restored)
+    await record('card.restored', `Card "${card.title}" restaurado da lixeira`)
     await broadcastTrash()
     return restored
   })
@@ -88,6 +90,7 @@ export async function trashRoutes(app: FastifyInstance) {
     })
 
     broadcast('list.created', list)
+    await record('list.restored', `Lista "${list.title}" restaurada da lixeira`)
     await broadcastTrash()
     return list
   })
@@ -98,6 +101,8 @@ export async function trashRoutes(app: FastifyInstance) {
     if (!exists) return reply.code(404).send({ error: 'card nao esta na lixeira' })
 
     await prisma.card.delete({ where: { id } })
+    // `exists` foi capturado antes do delete: depois dele nao ha linha para ler.
+    await record('card.purged', `Card "${exists.title}" apagado definitivamente`)
     // Sem `card.deleted`: para o board o card ja tinha sumido no soft delete.
     await broadcastTrash()
     return reply.code(204).send()
@@ -111,6 +116,7 @@ export async function trashRoutes(app: FastifyInstance) {
     // Cascade do schema leva os cards junto, inclusive os que estavam na lixeira
     // sozinhos -- a lista de origem deles deixou de existir.
     await prisma.list.delete({ where: { id } })
+    await record('list.purged', `Lista "${exists.title}" apagada definitivamente`)
     await broadcastTrash()
     return reply.code(204).send()
   })
@@ -133,6 +139,10 @@ export async function trashRoutes(app: FastifyInstance) {
     await prisma.list.deleteMany({ where: { deletedAt: { not: null } } })
     await prisma.card.deleteMany({ where: { deletedAt: { not: null } } })
 
+    await record(
+      'trash.emptied',
+      `Lixeira esvaziada: ${cards} card(s) e ${lists} lista(s) apagados`,
+    )
     await broadcastTrash()
     return reply.send({ deleted: { cards, lists } })
   })
